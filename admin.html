@@ -1,0 +1,132 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101827">
+  <title>Administración | LC Commerce</title>
+  <link rel="stylesheet" href="./style.css">
+  <style>
+    body {
+      background: #101827;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+    }
+    .admin-container {
+      max-width: 850px;
+      margin: auto;
+    }
+    .admin-header {
+      text-align: center;
+      padding: 25px 10px;
+    }
+    .admin-header h1 {
+      color: #fbbf24;
+      margin-bottom: 6px;
+    }
+    .admin-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 18px;
+    }
+    input, button {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 13px;
+      margin-top: 10px;
+      border-radius: 9px;
+      font-size: 16px;
+    }
+    input {
+      background: #0f172a;
+      color: white;
+      border: 1px solid #475569;
+    }
+    button {
+      background: #fbbf24;
+      color: #101827;
+      border: 0;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: #334155;
+      color: white;
+    }
+    #adminPanel {
+      display: none;
+    }
+    #message {
+      margin-top: 12px;
+      color: #fbbf24;
+      overflow-wrap: anywhere;
+    }
+    .admin-menu {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <main class="admin-container">
+    <header class="admin-header">
+      <h1>LC COMMERCE</h1>
+      <p>Panel de administración</p>
+    </header>
+
+    <section class="admin-card" id="loginPanel">
+      <h2>Acceso administrativo</h2>
+      <p>Ingresa con tu cuenta autorizada de Supabase.</p>
+
+      <form id="loginForm">
+        <input
+          type="email"
+          id="email"
+          placeholder="Correo electrónico"
+          autocomplete="username"
+          required
+        >
+        <input
+          type="password"
+          id="password"
+          placeholder="Contraseña"
+          autocomplete="current-password"
+          required
+        >
+        <button type="submit">Iniciar sesión</button>
+      </form>
+      <p id="message" role="status"></p>
+    </section>
+
+    <section id="adminPanel">
+      <div class="admin-card">
+        <h2>Bienvenido a LC Commerce</h2>
+        <p>Tu sesión administrativa está activa.</p>
+        <div class="admin-menu">
+          <button type="button" id="productsBtn">📦 Productos</button>
+          <button type="button" id="categoriesBtn">🏷️ Categorías</button>
+          <button type="button" id="ordersBtn">🧾 Pedidos</button>
+          <button type="button" id="imagesBtn">🖼️ Imágenes</button>
+        </div>
+        <button type="button" class="secondary" id="logoutBtn">
+          Cerrar sesión
+        </button>
+      </div>
+
+      <div class="admin-card" id="workspace">
+        <h3>Administración</h3>
+        <p>Selecciona una sección para comenzar.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./admin.js"></script>
+</body>
+</html>
