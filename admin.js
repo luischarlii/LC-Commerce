@@ -464,6 +464,191 @@ async function toggleProduct(id) {
 }
 
 // ======================================
+// ADMINISTRACIÓN DE CATEGORÍAS
+// ======================================
+
+function renderCategories(editing = null) {
+  const c = editing || {};
+
+  const list = categories.map(category => `
+    <div class="lc-product-card">
+      <strong>${escapeHTML(category.emoji || "🏷️")} 
+        ${escapeHTML(category.name)}</strong>
+      <p class="lc-status">
+        ${category.active ? "Activa" : "Inactiva"}
+      </p>
+      <div class="lc-actions">
+        <button type="button" data-category-edit="${category.id}">
+          Editar
+        </button>
+        <button type="button" class="lc-secondary"
+          data-category-toggle="${category.id}">
+          ${category.active ? "Desactivar" : "Activar"}
+        </button>
+      </div>
+    </div>
+  `).join("");
+
+  workspace.innerHTML = `
+    <h3>🏷️ Administración de categorías</h3>
+
+    <form id="categoryForm" class="lc-form-grid">
+      <input type="hidden" id="categoryId"
+        value="${escapeHTML(c.id || "")}">
+
+      <input id="categoryName"
+        placeholder="Nombre de la categoría"
+        maxlength="80"
+        value="${escapeHTML(c.name || "")}"
+        required>
+
+      <input id="categoryEmoji"
+        placeholder="Emoji (ejemplo 🍔)"
+        maxlength="12"
+        value="${escapeHTML(c.emoji || "🏷️")}">
+
+      <select id="categoryActive">
+        <option value="true" ${c.active !== false ? "selected" : ""}>
+          Activa
+        </option>
+        <option value="false" ${c.active === false ? "selected" : ""}>
+          Inactiva
+        </option>
+      </select>
+
+      <button type="submit">
+        ${c.id ? "Guardar cambios" : "Crear categoría"}
+      </button>
+
+      ${c.id ? `
+        <button type="button" class="lc-secondary"
+          id="cancelCategoryEdit">
+          Cancelar edición
+        </button>
+      ` : ""}
+    </form>
+
+    <p id="categoryMessage" class="lc-status"></p>
+
+    <hr>
+    <h3>Categorías registradas (${categories.length})</h3>
+    ${list || "<p>No hay categorías.</p>"}
+  `;
+
+  document.getElementById("categoryForm")
+    .addEventListener("submit", saveCategory);
+
+  document.getElementById("cancelCategoryEdit")
+    ?.addEventListener("click", () => renderCategories());
+
+  workspace.querySelectorAll("[data-category-edit]")
+    .forEach(button => {
+      button.addEventListener("click", () => {
+        const category = categories.find(
+          item => item.id === button.dataset.categoryEdit
+        );
+        if (category) renderCategories(category);
+      });
+    });
+
+  workspace.querySelectorAll("[data-category-toggle]")
+    .forEach(button => {
+      button.addEventListener("click", () => {
+        toggleCategory(button.dataset.categoryToggle);
+      });
+    });
+}
+
+async function saveCategory(event) {
+  event.preventDefault();
+
+  const id = document.getElementById("categoryId").value;
+  const category = {
+    name: document.getElementById("categoryName").value.trim(),
+    emoji: document.getElementById("categoryEmoji").value.trim() || "🏷️",
+    active: document.getElementById("categoryActive").value === "true"
+  };
+
+  const status = document.getElementById("categoryMessage");
+
+  if (!category.name) {
+    status.textContent = "Escribe el nombre de la categoría.";
+    return;
+  }
+
+  status.textContent = "Guardando...";
+
+  try {
+    if (id) {
+      await api(
+        "/rest/v1/lc_commerce_categories?id=eq." +
+        encodeURIComponent(id),
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify(category)
+        }
+      );
+    } else {
+      await api(
+        "/rest/v1/lc_commerce_categories",
+        {
+          method: "POST",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify(category)
+        }
+      );
+    }
+
+    await loadCategories();
+    await loadProducts();
+    renderCategories();
+    showMessage("Categoría guardada correctamente.");
+
+  } catch (error) {
+    status.textContent = "Error: " + error.message;
+  }
+}
+
+async function toggleCategory(id) {
+  const category = categories.find(item => item.id === id);
+  if (!category) return;
+
+  if (category.active) {
+    const hasProducts = products.some(
+      product => product.category_id === id && product.active
+    );
+
+    if (hasProducts) {
+      alert(
+        "Esta categoría tiene productos activos. " +
+        "Desactiva primero esos productos para evitar ocultarlos de la tienda."
+      );
+      return;
+    }
+  }
+
+  try {
+    await api(
+      "/rest/v1/lc_commerce_categories?id=eq." +
+      encodeURIComponent(id),
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ active: !category.active })
+      }
+    );
+
+    await loadCategories();
+    await loadProducts();
+    renderCategories();
+
+  } catch (error) {
+    alert("No se pudo actualizar la categoría: " + error.message);
+  }
+}
+p
+// ======================================
 // INICIAR
 // ======================================
 
@@ -475,7 +660,7 @@ document.getElementById("productsBtn")
 
 document.getElementById("categoriesBtn")
   .addEventListener("click", () => {
-    workspace.innerHTML = "<h3>🏷️ Categorías</h3><p>Sección en preparación.</p>";
+    renderCategories();
   });
 
 document.getElementById("ordersBtn")
