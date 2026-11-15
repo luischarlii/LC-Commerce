@@ -6,7 +6,7 @@
 const SUPABASE_URL = "https://fwacwaptqxhygifqfnsc.supabase.co";
 const SUPABASE_KEY = "sb_publishable_aB8Bk75Nidcd-pCeba5NmQ_cgOPOqnp";
 // Configuración del negocio
-const WHATSAPP_NUMBER = "5210000000000";
+const WHATSAPP_NUMBER = "526142780552";
 const MERCADO_PAGO_URL = "";
 // ===================================
 // VARIABLES
