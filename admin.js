@@ -12,6 +12,8 @@ const workspace = document.getElementById("workspace");
 
 let accessToken = localStorage.getItem("lc_commerce_admin_token") || "";
 let currentUser = null;
+let categories = [];
+let products = [];
 
 function showMessage(text) {
   message.textContent = text;
@@ -28,12 +30,9 @@ function showAdmin() {
 }
 
 function escapeHTML(value) {
-  return String(value).replace(/[&<>"']/g, c => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
+  return String(value ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;",
+    '"': "&quot;", "'": "&#39;"
   })[c]);
 }
 
@@ -41,8 +40,8 @@ async function api(path, options = {}, token = accessToken) {
   const response = await fetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
-      "apikey": SUPABASE_KEY,
-      "Authorization": `Bearer ${token || SUPABASE_KEY}`,
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${token || SUPABASE_KEY}`,
       "Content-Type": "application/json",
       ...options.headers
     }
@@ -59,13 +58,20 @@ async function api(path, options = {}, token = accessToken) {
 
   if (!response.ok) {
     throw new Error(
-      data?.msg || data?.message || data?.error_description ||
-      data?.hint || data?.details || `Error HTTP ${response.status}`
+      data?.message ||
+      data?.msg ||
+      data?.error_description ||
+      data?.details ||
+      `Error HTTP ${response.status}`
     );
   }
 
   return data;
 }
+
+// ======================================
+// AUTENTICACIÓN
+// ======================================
 
 async function verifyAdmin() {
   if (!accessToken) return false;
@@ -79,18 +85,11 @@ async function verifyAdmin() {
     );
 
     if (!Array.isArray(admins) || admins.length === 0) {
-      throw new Error("Esta cuenta no está registrada como administradora.");
+      throw new Error("Cuenta sin autorización administrativa.");
     }
 
     showAdmin();
-
-    workspace.innerHTML = `
-      <h3>Panel administrativo activo</h3>
-      <p>Sesión autorizada correctamente.</p>
-      <p>Correo: ${escapeHTML(currentUser.email || "")}</p>
-      <p>Selecciona una sección para comenzar.</p>
-    `;
-
+    await loadDashboard();
     return true;
 
   } catch (error) {
@@ -124,18 +123,16 @@ loginForm.addEventListener("submit", async event => {
       SUPABASE_KEY
     );
 
-    if (!result.access_token) {
-      throw new Error("Supabase no devolvió un token de acceso.");
-    }
-
     accessToken = result.access_token;
     localStorage.setItem("lc_commerce_admin_token", accessToken);
 
+    if (!accessToken) {
+      throw new Error("No se recibió el token de acceso.");
+    }
+
     const authorized = await verifyAdmin();
 
-    if (authorized) {
-      showMessage("");
-    }
+    if (authorized) showMessage("");
 
   } catch (error) {
     showMessage("Error de acceso: " + error.message);
@@ -149,7 +146,7 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   try {
     await api("/auth/v1/logout", { method: "POST" });
   } catch (error) {
-    console.warn("Cierre remoto:", error.message);
+    console.warn(error.message);
   }
 
   accessToken = "";
@@ -160,34 +157,315 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   showMessage("Sesión cerrada.");
 });
 
-const sections = {
-  productsBtn: {
-    title: "📦 Productos",
-    description: "Aquí construiremos el registro, edición y activación de productos."
-  },
-  categoriesBtn: {
-    title: "🏷️ Categorías",
-    description: "Aquí construiremos la administración de categorías."
-  },
-  ordersBtn: {
-    title: "🧾 Pedidos",
-    description: "Aquí mostraremos los pedidos y sus estados."
-  },
-  imagesBtn: {
-    title: "🖼️ Imágenes",
-    description: "Aquí prepararemos la gestión de fotografías."
-  }
-};
+// ======================================
+// ESTILOS DEL PANEL
+// ======================================
 
-Object.entries(sections).forEach(([id, section]) => {
-  document.getElementById(id).addEventListener("click", () => {
-    workspace.innerHTML = `
-      <h3>${section.title}</h3>
-      <p>${section.description}</p>
-      <p>Sección en preparación.</p>
+const adminStyles = document.createElement("style");
+
+adminStyles.textContent = `
+  .lc-form-grid {
+    display:grid;
+    grid-template-columns:1fr;
+    gap:10px;
+  }
+  .lc-product-card {
+    background:#0f172a;
+    border:1px solid #475569;
+    border-radius:12px;
+    padding:14px;
+    margin:12px 0;
+  }
+  .lc-product-card img {
+    width:75px;
+    height:75px;
+    object-fit:cover;
+    border-radius:9px;
+  }
+  .lc-product-row {
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .lc-actions {
+    display:flex;
+    gap:8px;
+  }
+  .lc-actions button {
+    flex:1;
+    font-size:14px;
+  }
+  .lc-secondary {
+    background:#334155!important;
+    color:white!important;
+  }
+  .lc-status {
+    color:#fbbf24;
+    font-size:13px;
+  }
+`;
+
+document.head.appendChild(adminStyles);
+
+// ======================================
+// CARGAR DATOS
+// ======================================
+
+async function loadDashboard() {
+  workspace.innerHTML = "<p>Cargando información...</p>";
+
+  try {
+    await Promise.all([
+      loadCategories(),
+      loadProducts()
+    ]);
+
+    renderProducts();
+
+  } catch (error) {
+    workspace.innerHTML =
+      `<p>Error al cargar: ${escapeHTML(error.message)}</p>`;
+  }
+}
+
+async function loadCategories() {
+  categories = await api(
+    "/rest/v1/lc_commerce_categories?select=id,name,emoji,active&order=name.asc"
+  );
+}
+
+async function loadProducts() {
+  products = await api(
+    "/rest/v1/lc_commerce_products?select=id,category_id,name,description,price,image_url,active&order=created_at.desc"
+  );
+}
+
+// ======================================
+// FORMULARIO DE PRODUCTOS
+// ======================================
+
+function renderProducts(editing = null) {
+  const p = editing || {};
+
+  const categoryOptions = categories
+    .filter(c => c.active || c.id === p.category_id)
+    .map(c => `
+      <option value="${escapeHTML(c.id)}"
+        ${c.id === p.category_id ? "selected" : ""}>
+        ${escapeHTML(c.emoji)} ${escapeHTML(c.name)}
+      </option>
+    `).join("");
+
+  const list = products.map(product => {
+    const category = categories.find(
+      c => c.id === product.category_id
+    );
+
+    return `
+      <div class="lc-product-card">
+        <div class="lc-product-row">
+          ${product.image_url ? `
+            <img src="${escapeHTML(product.image_url)}"
+              alt="${escapeHTML(product.name)}"
+              onerror="this.style.display='none'">
+          ` : ""}
+          <div>
+            <strong>${escapeHTML(product.name)}</strong>
+            <p>${escapeHTML(category?.name || "Sin categoría")}</p>
+            <p>$${Number(product.price).toFixed(2)} MXN</p>
+            <span class="lc-status">
+              ${product.active ? "Activo" : "Inactivo"}
+            </span>
+          </div>
+        </div>
+        <div class="lc-actions">
+          <button type="button" data-edit="${product.id}">
+            Editar
+          </button>
+          <button type="button" class="lc-secondary"
+            data-toggle="${product.id}">
+            ${product.active ? "Desactivar" : "Activar"}
+          </button>
+        </div>
+      </div>
     `;
+  }).join("");
+
+  workspace.innerHTML = `
+    <h3>📦 Administración de productos</h3>
+
+    <form id="productForm" class="lc-form-grid">
+      <input type="hidden" id="productId"
+        value="${escapeHTML(p.id || "")}">
+
+      <input id="productName"
+        placeholder="Nombre del producto"
+        maxlength="120"
+        value="${escapeHTML(p.name || "")}"
+        required>
+
+      <textarea id="productDescription"
+        placeholder="Descripción del producto"
+        rows="3">${escapeHTML(p.description || "")}</textarea>
+
+      <input id="productPrice"
+        type="number"
+        min="0.01"
+        max="9999999"
+        step="0.01"
+        placeholder="Precio en pesos"
+        value="${p.price ?? ""}"
+        required>
+
+      <select id="productCategory" required>
+        <option value="">Seleccionar categoría</option>
+        ${categoryOptions}
+      </select>
+
+      <input id="productImage"
+        type="url"
+        placeholder="URL de la imagen (opcional)"
+        value="${escapeHTML(p.image_url || "")}">
+
+      <select id="productActive">
+        <option value="true" ${p.active !== false ? "selected" : ""}>
+          Activo
+        </option>
+        <option value="false" ${p.active === false ? "selected" : ""}>
+          Inactivo
+        </option>
+      </select>
+
+      <button type="submit">
+        ${p.id ? "Guardar cambios" : "Agregar producto"}
+      </button>
+
+      ${p.id ? `
+        <button type="button" class="lc-secondary" id="cancelEdit">
+          Cancelar edición
+        </button>
+      ` : ""}
+    </form>
+
+    <p id="productMessage" class="lc-status"></p>
+
+    <hr>
+    <h3>Productos registrados (${products.length})</h3>
+
+    ${list || "<p>No hay productos registrados.</p>"}
+  `;
+
+  document.getElementById("productForm")
+    .addEventListener("submit", saveProduct);
+
+  document.getElementById("cancelEdit")
+    ?.addEventListener("click", () => renderProducts());
+
+  workspace.querySelectorAll("[data-edit]").forEach(button => {
+    button.addEventListener("click", () => {
+      const product = products.find(
+        p => p.id === button.dataset.edit
+      );
+      if (product) renderProducts(product);
+    });
   });
-});
+
+  workspace.querySelectorAll("[data-toggle]").forEach(button => {
+    button.addEventListener("click", () => {
+      toggleProduct(button.dataset.toggle);
+    });
+  });
+}
+
+// ======================================
+// GUARDAR PRODUCTO
+// ======================================
+
+async function saveProduct(event) {
+  event.preventDefault();
+
+  const productId = document.getElementById("productId").value;
+
+  const product = {
+    name: document.getElementById("productName").value.trim(),
+    description: document.getElementById("productDescription").value.trim(),
+    price: Number(document.getElementById("productPrice").value),
+    category_id: document.getElementById("productCategory").value,
+    image_url: document.getElementById("productImage").value.trim(),
+    active: document.getElementById("productActive").value === "true"
+  };
+
+  const status = document.getElementById("productMessage");
+
+  if (!product.name || !product.category_id ||
+      !Number.isFinite(product.price) || product.price <= 0) {
+    status.textContent = "Revisa el nombre, categoría y precio.";
+    return;
+  }
+
+  status.textContent = "Guardando...";
+
+  try {
+    if (productId) {
+      await api(
+        "/rest/v1/lc_commerce_products?id=eq." +
+        encodeURIComponent(productId),
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify(product)
+        }
+      );
+    } else {
+      await api(
+        "/rest/v1/lc_commerce_products",
+        {
+          method: "POST",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify(product)
+        }
+      );
+    }
+
+    await loadProducts();
+    renderProducts();
+    showMessage("Producto guardado correctamente.");
+
+  } catch (error) {
+    status.textContent = "Error: " + error.message;
+  }
+}
+
+// ======================================
+// ACTIVAR / DESACTIVAR
+// ======================================
+
+async function toggleProduct(id) {
+  const product = products.find(p => p.id === id);
+  if (!product) return;
+
+  try {
+    await api(
+      "/rest/v1/lc_commerce_products?id=eq." +
+      encodeURIComponent(id),
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ active: !product.active })
+      }
+    );
+
+    await loadProducts();
+    renderProducts();
+
+  } catch (error) {
+    alert("No se pudo actualizar: " + error.message);
+  }
+}
+
+// ======================================
+// INICIAR
+// ======================================
 
 showLogin();
 
