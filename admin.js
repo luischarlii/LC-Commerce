@@ -649,6 +649,241 @@ async function toggleCategory(id) {
 }
 
 // ======================================
+// ADMINISTRACIÓN DE PEDIDOS
+// ======================================
+
+let orders = [];
+let orderItems = [];
+
+async function loadOrders() {
+  orders = await api(
+    "/rest/v1/lc_commerce_orders" +
+    "?select=id,customer_name,customer_phone,delivery_type,address,total,status,payment_status,payment_reference,created_at" +
+    "&order=created_at.desc"
+  );
+
+  orderItems = await api(
+    "/rest/v1/lc_commerce_order_items" +
+    "?select=id,order_id,product_name,quantity,unit_price,subtotal"
+  );
+}
+
+function formatDate(date) {
+  return new Date(date).toLocaleString("es-MX", {
+    dateStyle: "short",
+    timeStyle: "short"
+  });
+}
+
+function renderOrders() {
+
+  const list = orders.map(order => {
+
+    const items = orderItems.filter(
+      item => item.order_id === order.id
+    );
+
+    const itemsHTML = items.map(item => `
+      <div style="margin:6px 0;padding:8px;background:#111827;border-radius:8px;">
+        <strong>${escapeHTML(item.product_name)}</strong>
+        <br>
+        ${item.quantity} × $${Number(item.unit_price).toFixed(2)}
+        = $${Number(item.subtotal).toFixed(2)}
+      </div>
+    `).join("");
+
+    return `
+      <div class="lc-product-card">
+
+        <h3>🧾 Pedido</h3>
+
+        <p>
+          <strong>Cliente:</strong>
+          ${escapeHTML(order.customer_name)}
+        </p>
+
+        <p>
+          <strong>Teléfono:</strong>
+          ${escapeHTML(order.customer_phone || "No proporcionado")}
+        </p>
+
+        <p>
+          <strong>Entrega:</strong>
+          ${escapeHTML(order.delivery_type || "No especificada")}
+        </p>
+
+        ${
+          order.address
+            ? `<p><strong>Dirección:</strong> ${escapeHTML(order.address)}</p>`
+            : ""
+        }
+
+        <hr>
+
+        <strong>Productos</strong>
+
+        ${itemsHTML || "<p>No hay productos registrados.</p>"}
+
+        <hr>
+
+        <p>
+          <strong>Total:</strong>
+          $${Number(order.total).toFixed(2)} MXN
+        </p>
+
+        <p>
+          <strong>Fecha:</strong>
+          ${formatDate(order.created_at)}
+        </p>
+
+        <p>
+          <strong>Estado del pedido:</strong>
+        </p>
+
+        <select
+          class="order-status"
+          data-order-id="${order.id}"
+        >
+          <option value="pendiente"
+            ${order.status === "pendiente" ? "selected" : ""}>
+            Pendiente
+          </option>
+
+          <option value="confirmado"
+            ${order.status === "confirmado" ? "selected" : ""}>
+            Confirmado
+          </option>
+
+          <option value="preparando"
+            ${order.status === "preparando" ? "selected" : ""}>
+            Preparando
+          </option>
+
+          <option value="enviado"
+            ${order.status === "enviado" ? "selected" : ""}>
+            Enviado
+          </option>
+
+          <option value="entregado"
+            ${order.status === "entregado" ? "selected" : ""}>
+            Entregado
+          </option>
+
+          <option value="cancelado"
+            ${order.status === "cancelado" ? "selected" : ""}>
+            Cancelado
+          </option>
+        </select>
+
+        <p>
+          <strong>Pago:</strong>
+          ${escapeHTML(order.payment_status || "pendiente")}
+        </p>
+
+        ${
+          order.payment_reference
+            ? `<p><strong>Referencia:</strong> ${escapeHTML(order.payment_reference)}</p>`
+            : ""
+        }
+
+        <p class="lc-status" id="orderMessage-${order.id}"></p>
+
+      </div>
+    `;
+  }).join("");
+
+  workspace.innerHTML = `
+    <h3>🧾 Administración de pedidos</h3>
+
+    <button type="button" id="refreshOrders">
+      🔄 Actualizar pedidos
+    </button>
+
+    <p class="lc-status">
+      ${orders.length} pedido${orders.length === 1 ? "" : "s"} registrado${orders.length === 1 ? "" : "s"}.
+    </p>
+
+    <hr>
+
+    ${
+      list ||
+      "<p>No hay pedidos registrados todavía.</p>"
+    }
+  `;
+
+  document.getElementById("refreshOrders")
+    .onclick = async () => {
+      workspace.innerHTML = "<p>Actualizando pedidos...</p>";
+
+      try {
+        await loadOrders();
+        renderOrders();
+      } catch (error) {
+        workspace.innerHTML =
+          `<p>Error al cargar pedidos: ${escapeHTML(error.message)}</p>`;
+      }
+    };
+
+  workspace.querySelectorAll(".order-status")
+    .forEach(select => {
+
+      select.addEventListener("change", async () => {
+
+        const orderId = select.dataset.orderId;
+        const newStatus = select.value;
+        const message = document.getElementById(
+          `orderMessage-${orderId}`
+        );
+
+        message.textContent = "Guardando...";
+
+        try {
+
+          await api(
+            "/rest/v1/lc_commerce_orders?id=eq." +
+            encodeURIComponent(orderId),
+            {
+              method: "PATCH",
+              headers: {
+                Prefer: "return=minimal"
+              },
+              body: JSON.stringify({
+                status: newStatus
+              })
+            }
+          );
+
+          message.textContent =
+            "Estado actualizado correctamente.";
+
+        } catch (error) {
+
+          message.textContent =
+            "Error: " + error.message;
+
+        }
+      });
+    });
+}
+
+async function openOrders() {
+
+  workspace.innerHTML =
+    "<p>Cargando pedidos...</p>";
+
+  try {
+
+    await loadOrders();
+    renderOrders();
+
+  } catch (error) {
+
+    workspace.innerHTML =
+      `<p>Error al cargar pedidos: ${escapeHTML(error.message)}</p>`;
+
+  }
+}
+// ======================================
 // INICIAR
 // ======================================
 
