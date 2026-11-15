@@ -1,6 +1,10 @@
 
 "use strict";
 
+// ======================================
+// CONFIGURACIÓN
+// ======================================
+
 const SUPABASE_URL = "https://fwacwaptqxhygifqfnsc.supabase.co";
 const SUPABASE_KEY = "sb_publishable_aB8Bk75Nidcd-pCeba5NmQ_cgOPOqnp";
 
@@ -10,10 +14,16 @@ const loginForm = document.getElementById("loginForm");
 const message = document.getElementById("message");
 const workspace = document.getElementById("workspace");
 
-let accessToken = localStorage.getItem("lc_commerce_admin_token") || "";
+let accessToken = "";
 let currentUser = null;
 let categories = [];
 let products = [];
+let orders = [];
+let orderItems = [];
+
+// ======================================
+// UTILIDADES
+// ======================================
 
 function showMessage(text) {
   message.textContent = text;
@@ -31,8 +41,11 @@ function showAdmin() {
 
 function escapeHTML(value) {
   return String(value ?? "").replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;",
-    '"': "&quot;", "'": "&#39;"
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
   })[c]);
 }
 
@@ -90,14 +103,16 @@ async function verifyAdmin() {
 
     showAdmin();
     await loadDashboard();
+
     return true;
 
   } catch (error) {
     accessToken = "";
     currentUser = null;
-    localStorage.removeItem("lc_commerce_admin_token");
+
     showLogin();
     showMessage(error.message);
+
     return false;
   }
 }
@@ -124,7 +139,6 @@ loginForm.addEventListener("submit", async event => {
     );
 
     accessToken = result.access_token;
-    localStorage.setItem("lc_commerce_admin_token", accessToken);
 
     if (!accessToken) {
       throw new Error("No se recibió el token de acceso.");
@@ -132,17 +146,22 @@ loginForm.addEventListener("submit", async event => {
 
     const authorized = await verifyAdmin();
 
-    if (authorized) showMessage("");
+    if (authorized) {
+      loginForm.reset();
+      showMessage("");
+    }
 
   } catch (error) {
+    accessToken = "";
     showMessage("Error de acceso: " + error.message);
+
   } finally {
     button.disabled = false;
     button.textContent = "Iniciar sesión";
   }
 });
 
-document.getElementById("logoutBtn").addEventListener("click", async () => {
+document.getElementById("logoutBtn").onclick = async () => {
   try {
     await api("/auth/v1/logout", { method: "POST" });
   } catch (error) {
@@ -151,11 +170,11 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
 
   accessToken = "";
   currentUser = null;
-  localStorage.removeItem("lc_commerce_admin_token");
+
   loginForm.reset();
   showLogin();
   showMessage("Sesión cerrada.");
-});
+};
 
 // ======================================
 // ESTILOS DEL PANEL
@@ -169,6 +188,7 @@ adminStyles.textContent = `
     grid-template-columns:1fr;
     gap:10px;
   }
+
   .lc-product-card {
     background:#0f172a;
     border:1px solid #475569;
@@ -176,29 +196,35 @@ adminStyles.textContent = `
     padding:14px;
     margin:12px 0;
   }
+
   .lc-product-card img {
     width:75px;
     height:75px;
     object-fit:cover;
     border-radius:9px;
   }
+
   .lc-product-row {
     display:flex;
     align-items:center;
     gap:12px;
   }
+
   .lc-actions {
     display:flex;
     gap:8px;
   }
+
   .lc-actions button {
     flex:1;
     font-size:14px;
   }
+
   .lc-secondary {
     background:#334155!important;
     color:white!important;
   }
+
   .lc-status {
     color:#fbbf24;
     font-size:13px;
@@ -241,7 +267,7 @@ async function loadProducts() {
 }
 
 // ======================================
-// FORMULARIO DE PRODUCTOS
+// PRODUCTOS
 // ======================================
 
 function renderProducts(editing = null) {
@@ -269,6 +295,7 @@ function renderProducts(editing = null) {
               alt="${escapeHTML(product.name)}"
               onerror="this.style.display='none'">
           ` : ""}
+
           <div>
             <strong>${escapeHTML(product.name)}</strong>
             <p>${escapeHTML(category?.name || "Sin categoría")}</p>
@@ -278,10 +305,12 @@ function renderProducts(editing = null) {
             </span>
           </div>
         </div>
+
         <div class="lc-actions">
           <button type="button" data-edit="${product.id}">
             Editar
           </button>
+
           <button type="button" class="lc-secondary"
             data-toggle="${product.id}">
             ${product.active ? "Desactivar" : "Activar"}
@@ -362,24 +391,19 @@ function renderProducts(editing = null) {
     ?.addEventListener("click", () => renderProducts());
 
   workspace.querySelectorAll("[data-edit]").forEach(button => {
-    button.addEventListener("click", () => {
+    button.onclick = () => {
       const product = products.find(
         p => p.id === button.dataset.edit
       );
+
       if (product) renderProducts(product);
-    });
+    };
   });
 
   workspace.querySelectorAll("[data-toggle]").forEach(button => {
-    button.addEventListener("click", () => {
-      toggleProduct(button.dataset.toggle);
-    });
+    button.onclick = () => toggleProduct(button.dataset.toggle);
   });
 }
-
-// ======================================
-// GUARDAR PRODUCTO
-// ======================================
 
 async function saveProduct(event) {
   event.preventDefault();
@@ -436,10 +460,6 @@ async function saveProduct(event) {
   }
 }
 
-// ======================================
-// ACTIVAR / DESACTIVAR
-// ======================================
-
 async function toggleProduct(id) {
   const product = products.find(p => p.id === id);
   if (!product) return;
@@ -464,7 +484,7 @@ async function toggleProduct(id) {
 }
 
 // ======================================
-// ADMINISTRACIÓN DE CATEGORÍAS
+// CATEGORÍAS
 // ======================================
 
 function renderCategories(editing = null) {
@@ -472,15 +492,20 @@ function renderCategories(editing = null) {
 
   const list = categories.map(category => `
     <div class="lc-product-card">
-      <strong>${escapeHTML(category.emoji || "🏷️")} 
-        ${escapeHTML(category.name)}</strong>
+      <strong>
+        ${escapeHTML(category.emoji || "🏷️")}
+        ${escapeHTML(category.name)}
+      </strong>
+
       <p class="lc-status">
         ${category.active ? "Activa" : "Inactiva"}
       </p>
+
       <div class="lc-actions">
         <button type="button" data-category-edit="${category.id}">
           Editar
         </button>
+
         <button type="button" class="lc-secondary"
           data-category-toggle="${category.id}">
           ${category.active ? "Desactivar" : "Activar"}
@@ -543,19 +568,20 @@ function renderCategories(editing = null) {
 
   workspace.querySelectorAll("[data-category-edit]")
     .forEach(button => {
-      button.addEventListener("click", () => {
+      button.onclick = () => {
         const category = categories.find(
           item => item.id === button.dataset.categoryEdit
         );
+
         if (category) renderCategories(category);
-      });
+      };
     });
 
   workspace.querySelectorAll("[data-category-toggle]")
     .forEach(button => {
-      button.addEventListener("click", () => {
+      button.onclick = () => {
         toggleCategory(button.dataset.categoryToggle);
-      });
+      };
     });
 }
 
@@ -563,6 +589,7 @@ async function saveCategory(event) {
   event.preventDefault();
 
   const id = document.getElementById("categoryId").value;
+
   const category = {
     name: document.getElementById("categoryName").value.trim(),
     emoji: document.getElementById("categoryEmoji").value.trim() || "🏷️",
@@ -603,6 +630,7 @@ async function saveCategory(event) {
     await loadCategories();
     await loadProducts();
     renderCategories();
+
     showMessage("Categoría guardada correctamente.");
 
   } catch (error) {
@@ -649,11 +677,8 @@ async function toggleCategory(id) {
 }
 
 // ======================================
-// ADMINISTRACIÓN DE PEDIDOS
+// PEDIDOS
 // ======================================
-
-let orders = [];
-let orderItems = [];
 
 async function loadOrders() {
   orders = await api(
@@ -669,32 +694,65 @@ async function loadOrders() {
 }
 
 function formatDate(date) {
-  return new Date(date).toLocaleString("es-MX", {
+  const parsed = new Date(date);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "Fecha no disponible";
+  }
+
+  return parsed.toLocaleString("es-MX", {
     dateStyle: "short",
     timeStyle: "short"
   });
 }
 
 function renderOrders() {
+  const statusOptions = [
+    ["pendiente", "Pendiente"],
+    ["confirmado", "Confirmado"],
+    ["preparando", "Preparando"],
+    ["enviado", "Enviado"],
+    ["entregado", "Entregado"],
+    ["cancelado", "Cancelado"]
+  ];
 
   const list = orders.map(order => {
-
     const items = orderItems.filter(
       item => item.order_id === order.id
     );
+
+    const currentStatus = String(order.status || "pendiente");
+
+    const hasCurrentStatus = statusOptions.some(
+      option => option[0] === currentStatus
+    );
+
+    const optionsHTML = `
+      ${!hasCurrentStatus ? `
+        <option value="${escapeHTML(currentStatus)}" selected>
+          ${escapeHTML(currentStatus)}
+        </option>
+      ` : ""}
+
+      ${statusOptions.map(option => `
+        <option value="${option[0]}"
+          ${currentStatus === option[0] ? "selected" : ""}>
+          ${option[1]}
+        </option>
+      `).join("")}
+    `;
 
     const itemsHTML = items.map(item => `
       <div style="margin:6px 0;padding:8px;background:#111827;border-radius:8px;">
         <strong>${escapeHTML(item.product_name)}</strong>
         <br>
-        ${item.quantity} × $${Number(item.unit_price).toFixed(2)}
+        ${Number(item.quantity)} × $${Number(item.unit_price).toFixed(2)}
         = $${Number(item.subtotal).toFixed(2)}
       </div>
     `).join("");
 
     return `
       <div class="lc-product-card">
-
         <h3>🧾 Pedido</h3>
 
         <p>
@@ -736,43 +794,10 @@ function renderOrders() {
           ${formatDate(order.created_at)}
         </p>
 
-        <p>
-          <strong>Estado del pedido:</strong>
-        </p>
+        <p><strong>Estado del pedido:</strong></p>
 
-        <select
-          class="order-status"
-          data-order-id="${order.id}"
-        >
-          <option value="pendiente"
-            ${order.status === "pendiente" ? "selected" : ""}>
-            Pendiente
-          </option>
-
-          <option value="confirmado"
-            ${order.status === "confirmado" ? "selected" : ""}>
-            Confirmado
-          </option>
-
-          <option value="preparando"
-            ${order.status === "preparando" ? "selected" : ""}>
-            Preparando
-          </option>
-
-          <option value="enviado"
-            ${order.status === "enviado" ? "selected" : ""}>
-            Enviado
-          </option>
-
-          <option value="entregado"
-            ${order.status === "entregado" ? "selected" : ""}>
-            Entregado
-          </option>
-
-          <option value="cancelado"
-            ${order.status === "cancelado" ? "selected" : ""}>
-            Cancelado
-          </option>
+        <select class="order-status" data-order-id="${order.id}">
+          ${optionsHTML}
         </select>
 
         <p>
@@ -787,7 +812,6 @@ function renderOrders() {
         }
 
         <p class="lc-status" id="orderMessage-${order.id}"></p>
-
       </div>
     `;
   }).join("");
@@ -800,111 +824,92 @@ function renderOrders() {
     </button>
 
     <p class="lc-status">
-      ${orders.length} pedido${orders.length === 1 ? "" : "s"} registrado${orders.length === 1 ? "" : "s"}.
+      ${orders.length}
+      pedido${orders.length === 1 ? "" : "s"}
+      registrado${orders.length === 1 ? "" : "s"}.
     </p>
 
     <hr>
 
-    ${
-      list ||
-      "<p>No hay pedidos registrados todavía.</p>"
-    }
+    ${list || "<p>No hay pedidos registrados todavía.</p>"}
   `;
 
-  document.getElementById("refreshOrders")
-    .onclick = async () => {
-      workspace.innerHTML = "<p>Actualizando pedidos...</p>";
+  document.getElementById("refreshOrders").onclick = async () => {
+    workspace.innerHTML = "<p>Actualizando pedidos...</p>";
+
+    try {
+      await loadOrders();
+      renderOrders();
+    } catch (error) {
+      workspace.innerHTML =
+        `<p>Error al cargar pedidos: ${escapeHTML(error.message)}</p>`;
+    }
+  };
+
+  workspace.querySelectorAll(".order-status").forEach(select => {
+    select.onchange = async () => {
+      const orderId = select.dataset.orderId;
+      const newStatus = select.value;
+
+      const statusMessage = document.getElementById(
+        `orderMessage-${orderId}`
+      );
+
+      statusMessage.textContent = "Guardando...";
 
       try {
-        await loadOrders();
-        renderOrders();
-      } catch (error) {
-        workspace.innerHTML =
-          `<p>Error al cargar pedidos: ${escapeHTML(error.message)}</p>`;
-      }
-    };
-
-  workspace.querySelectorAll(".order-status")
-    .forEach(select => {
-
-      select.addEventListener("change", async () => {
-
-        const orderId = select.dataset.orderId;
-        const newStatus = select.value;
-        const message = document.getElementById(
-          `orderMessage-${orderId}`
+        await api(
+          "/rest/v1/lc_commerce_orders?id=eq." +
+          encodeURIComponent(orderId),
+          {
+            method: "PATCH",
+            headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({ status: newStatus })
+          }
         );
 
-        message.textContent = "Guardando...";
+        statusMessage.textContent =
+          "Estado actualizado correctamente.";
 
-        try {
-
-          await api(
-            "/rest/v1/lc_commerce_orders?id=eq." +
-            encodeURIComponent(orderId),
-            {
-              method: "PATCH",
-              headers: {
-                Prefer: "return=minimal"
-              },
-              body: JSON.stringify({
-                status: newStatus
-              })
-            }
-          );
-
-          message.textContent =
-            "Estado actualizado correctamente.";
-
-        } catch (error) {
-
-          message.textContent =
-            "Error: " + error.message;
-
-        }
-      });
-    });
+      } catch (error) {
+        statusMessage.textContent =
+          "Error: " + error.message;
+      }
+    };
+  });
 }
 
 async function openOrders() {
-
-  workspace.innerHTML =
-    "<p>Cargando pedidos...</p>";
+  workspace.innerHTML = "<p>Cargando pedidos...</p>";
 
   try {
-
     await loadOrders();
     renderOrders();
 
   } catch (error) {
-
     workspace.innerHTML =
       `<p>Error al cargar pedidos: ${escapeHTML(error.message)}</p>`;
-
   }
 }
+
 // ======================================
 // INICIAR
 // ======================================
 
 showLogin();
 
-// Botón de productos
 document.getElementById("productsBtn").onclick = () => {
   renderProducts();
 };
 
-// Botón de categorías
 document.getElementById("categoriesBtn").onclick = () => {
   renderCategories();
 };
 
-// Botón de pedidos
 document.getElementById("ordersBtn").onclick = () => {
   openOrders();
 };
 
-// Botón de imágenes
 document.getElementById("imagesBtn").onclick = () => {
   workspace.innerHTML = `
     <h3>🖼️ Imágenes</h3>
@@ -912,7 +917,8 @@ document.getElementById("imagesBtn").onclick = () => {
   `;
 };
 
-// Verificar sesión existente
-if (accessToken) {
-  verifyAdmin();
+// No recuperar sesiones anteriores.
+// El accesoToken comienza vacío en cada apertura.
+if (!accessToken) {
+  showLogin();
 }
