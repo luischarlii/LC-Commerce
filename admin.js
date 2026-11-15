@@ -647,31 +647,42 @@ async function toggleCategory(id) {
     alert("No se pudo actualizar la categoría: " + error.message);
   }
 }
-p
+
+}
+
 // ======================================
 // INICIAR
 // ======================================
 
 showLogin();
-document.getElementById("productsBtn")
-  .addEventListener("click", () => {
-    renderProducts();
-  });
 
-document.getElementById("categoriesBtn")
-  .addEventListener("click", () => {
-    renderCategories();
-  });
+// Botón de productos
+document.getElementById("productsBtn").onclick = () => {
+  renderProducts();
+};
 
-document.getElementById("ordersBtn")
-  .addEventListener("click", () => {
-    workspace.innerHTML = "<h3>🧾 Pedidos</h3><p>Sección en preparación.</p>";
-  });
+// Botón de categorías
+document.getElementById("categoriesBtn").onclick = () => {
+  renderCategories();
+};
 
-document.getElementById("imagesBtn")
-  .addEventListener("click", () => {
-    workspace.innerHTML = "<h3>🖼️ Imágenes</h3><p>Sección en preparación.</p>";
-  });
+// Botón de pedidos
+document.getElementById("ordersBtn").onclick = () => {
+  workspace.innerHTML = `
+    <h3>🧾 Pedidos</h3>
+    <p>Sección en preparación.</p>
+  `;
+};
+
+// Botón de imágenes
+document.getElementById("imagesBtn").onclick = () => {
+  workspace.innerHTML = `
+    <h3>🖼️ Imágenes</h3>
+    <p>Sección en preparación.</p>
+  `;
+};
+
+// Verificar sesión existente
 if (accessToken) {
   verifyAdmin();
 }
