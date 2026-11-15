@@ -1,0 +1,550 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0b1020;
+  color: #f8fafc;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+/* CABECERA */
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 14px 16px;
+
+  background: rgba(11, 16, 32, 0.96);
+
+  border-bottom: 1px solid #263047;
+
+  backdrop-filter: blur(10px);
+}
+
+.brand {
+  font-size: 22px;
+  font-weight: 900;
+  color: #fbbf24;
+}
+
+.brand span {
+  color: #ffffff;
+}
+
+.sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+/* CARRITO */
+
+.cart {
+  border: 0;
+  background: #fbbf24;
+  color: #111827;
+
+  border-radius: 14px;
+
+  padding: 10px 14px;
+
+  font-size: 17px;
+  font-weight: 800;
+
+  cursor: pointer;
+}
+
+.cart b {
+  margin-left: 3px;
+}
+
+/* PORTADA */
+
+.hero {
+  margin: 16px;
+
+  padding: 20px;
+
+  border-radius: 20px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #17233d,
+      #111827
+    );
+
+  border: 1px solid #293754;
+}
+
+.hero h1 {
+  margin: 0 0 7px;
+
+  font-size: 24px;
+}
+
+.hero p {
+  margin: 0;
+
+  color: #cbd5e1;
+
+  line-height: 1.5;
+}
+
+/* CATEGORÍAS */
+
+.cats {
+  display: flex;
+
+  gap: 8px;
+
+  overflow-x: auto;
+
+  padding:
+    0 16px 12px;
+
+  scrollbar-width: none;
+}
+
+.cats::-webkit-scrollbar {
+  display: none;
+}
+
+.cats button {
+  white-space: nowrap;
+
+  border: 1px solid #334155;
+
+  background: #111827;
+
+  color: #cbd5e1;
+
+  border-radius: 999px;
+
+  padding: 9px 14px;
+
+  font-size: 13px;
+
+  cursor: pointer;
+}
+
+.cats button.active {
+  background: #fbbf24;
+
+  color: #111827;
+
+  border-color: #fbbf24;
+
+  font-weight: 800;
+}
+
+/* PRODUCTOS */
+
+.products {
+  display: grid;
+
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
+  gap: 12px;
+
+  padding:
+    0 16px 100px;
+}
+
+.card {
+  overflow: hidden;
+
+  background: #111827;
+
+  border:
+    1px solid #27344d;
+
+  border-radius: 18px;
+
+  box-shadow:
+    0 8px 25px rgba(0, 0, 0, 0.18);
+}
+
+.photo {
+  height: 130px;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  background: #1e293b;
+
+  font-size: 50px;
+}
+
+.info {
+  padding: 12px;
+}
+
+.name {
+  font-weight: 800;
+
+  font-size: 15px;
+}
+
+.desc {
+  min-height: 34px;
+
+  margin-top: 5px;
+
+  font-size: 12px;
+
+  line-height: 1.4;
+
+  color: #94a3b8;
+}
+
+.price {
+  margin:
+    8px 0;
+
+  color: #fbbf24;
+
+  font-size: 18px;
+
+  font-weight: 900;
+}
+
+.add {
+  width: 100%;
+
+  border: 0;
+
+  border-radius: 12px;
+
+  padding: 10px;
+
+  background: #fbbf24;
+
+  color: #111827;
+
+  font-weight: 900;
+
+  cursor: pointer;
+}
+
+.add:active {
+  transform: scale(0.97);
+}
+
+/* CARRITO */
+
+.drawer {
+  position: fixed;
+
+  inset: 0;
+
+  z-index: 100;
+
+  display: flex;
+
+  align-items: flex-end;
+
+  background:
+    rgba(0, 0, 0, 0.72);
+}
+
+.hidden {
+  display: none;
+}
+
+.drawerBox {
+  width: 100%;
+
+  max-height: 90vh;
+
+  overflow-y: auto;
+
+  padding: 18px;
+
+  background: #0f172a;
+
+  border-radius:
+    24px 24px 0 0;
+}
+
+.drawerHead {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+}
+
+.drawerHead h2 {
+  margin: 0;
+}
+
+.drawerHead button {
+  border: 0;
+
+  background: transparent;
+
+  color: #ffffff;
+
+  font-size: 22px;
+
+  cursor: pointer;
+}
+
+/* PRODUCTOS DEL CARRITO */
+
+.item {
+  display: flex;
+
+  align-items: center;
+
+  gap: 10px;
+
+  padding: 12px 0;
+
+  border-bottom:
+    1px solid #263047;
+}
+
+.item .emoji {
+  font-size: 30px;
+}
+
+.itemMain {
+  flex: 1;
+}
+
+.itemMain b {
+  display: block;
+
+  margin-bottom: 3px;
+}
+
+.itemMain div {
+  color: #fbbf24;
+
+  font-size: 14px;
+
+  font-weight: 700;
+}
+
+.qty {
+  display: flex;
+
+  align-items: center;
+
+  gap: 8px;
+}
+
+.qty button {
+  width: 30px;
+
+  height: 30px;
+
+  border: 0;
+
+  border-radius: 8px;
+
+  background: #334155;
+
+  color: #ffffff;
+
+  font-size: 18px;
+
+  cursor: pointer;
+}
+
+/* TOTAL */
+
+.total {
+  display: flex;
+
+  justify-content: space-between;
+
+  align-items: center;
+
+  padding: 16px 0;
+
+  font-size: 20px;
+}
+
+.total strong {
+  color: #fbbf24;
+}
+
+/* FORMULARIO */
+
+label {
+  display: block;
+
+  margin:
+    10px 0 5px;
+
+  font-size: 12px;
+
+  color: #94a3b8;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+
+  padding: 11px;
+
+  border:
+    1px solid #334155;
+
+  border-radius: 11px;
+
+  background: #111827;
+
+  color: #ffffff;
+
+  font-family: inherit;
+
+  outline: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #fbbf24;
+}
+
+/* BOTONES */
+
+.primary,
+.pay {
+  width: 100%;
+
+  margin-top: 12px;
+
+  padding: 13px;
+
+  border: 0;
+
+  border-radius: 13px;
+
+  font-weight: 900;
+
+  font-size: 14px;
+
+  cursor: pointer;
+}
+
+.primary {
+  background: #25d366;
+
+  color: #07110a;
+}
+
+.pay {
+  background: #3483fa;
+
+  color: #ffffff;
+}
+
+.primary:active,
+.pay:active {
+  transform: scale(0.98);
+}
+
+.note {
+  margin:
+    10px 0 0;
+
+  text-align: center;
+
+  font-size: 11px;
+
+  line-height: 1.4;
+
+  color: #64748b;
+}
+
+/* CARRITO VACÍO */
+
+.empty {
+  padding: 25px 10px;
+
+  text-align: center;
+
+  color: #94a3b8;
+}
+
+/* AVISO */
+
+#toast {
+  position: fixed;
+
+  left: 50%;
+
+  bottom: 25px;
+
+  z-index: 200;
+
+  transform:
+    translateX(-50%);
+
+  display: none;
+
+  padding: 10px 15px;
+
+  border:
+    1px solid #334155;
+
+  border-radius: 12px;
+
+  background: #111827;
+
+  color: #ffffff;
+
+  font-size: 13px;
+
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+/* TABLET / COMPUTADORA */
+
+@media (min-width: 700px) {
+
+  .products {
+    max-width: 1100px;
+
+    margin: 0 auto;
+
+    grid-template-columns:
+      repeat(4, minmax(0, 1fr));
+  }
+
+  .hero {
+    max-width: 1100px;
+
+    margin:
+      16px auto;
+  }
+
+  .cats {
+    max-width: 1100px;
+
+    margin: 0 auto;
+  }
+}
