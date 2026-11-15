@@ -125,7 +125,11 @@
       </div>
     </section>
   </main>
-
-<script src="./admin.js?v=17"></script>
+<script>
+  
+  const script = document.createElement("script");
+  script.src = "./admin.js?v=" + Date.now();
+  document.body.appendChild(script);
+</script>
 </body>
 </html>
