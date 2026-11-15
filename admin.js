@@ -901,10 +901,7 @@ document.getElementById("categoriesBtn").onclick = () => {
 
 // Botón de pedidos
 document.getElementById("ordersBtn").onclick = () => {
-  workspace.innerHTML = `
-    <h3>🧾 Pedidos</h3>
-    <p>Sección en preparación.</p>
-  `;
+  openOrders();
 };
 
 // Botón de imágenes
