@@ -1,0 +1,19 @@
+
+{
+  "id": "./",
+  "name": "LC Commerce",
+  "short_name": "LC Commerce",
+  "description": "Plataforma de menús, compras y pedidos por WhatsApp.",
+  "lang": "es-MX",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "categories": [
+    "shopping",
+    "food",
+    "business"
+  ]
+}
