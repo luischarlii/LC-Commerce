@@ -468,7 +468,25 @@ async function toggleProduct(id) {
 // ======================================
 
 showLogin();
+document.getElementById("productsBtn")
+  .addEventListener("click", () => {
+    renderProducts();
+  });
 
+document.getElementById("categoriesBtn")
+  .addEventListener("click", () => {
+    workspace.innerHTML = "<h3>🏷️ Categorías</h3><p>Sección en preparación.</p>";
+  });
+
+document.getElementById("ordersBtn")
+  .addEventListener("click", () => {
+    workspace.innerHTML = "<h3>🧾 Pedidos</h3><p>Sección en preparación.</p>";
+  });
+
+document.getElementById("imagesBtn")
+  .addEventListener("click", () => {
+    workspace.innerHTML = "<h3>🖼️ Imágenes</h3><p>Sección en preparación.</p>";
+  });
 if (accessToken) {
   verifyAdmin();
 }
