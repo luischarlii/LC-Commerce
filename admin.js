@@ -8,6 +8,8 @@
 const SUPABASE_URL = "https://fwacwaptqxhygifqfnsc.supabase.co";
 const SUPABASE_KEY = "sb_publishable_aB8Bk75Nidcd-pCeba5NmQ_cgOPOqnp";
 
+const STORAGE_BUCKET = "lc-commerce-images";
+
 const loginPanel = document.getElementById("loginPanel");
 const adminPanel = document.getElementById("adminPanel");
 const loginForm = document.getElementById("loginForm");
@@ -26,7 +28,7 @@ let orderItems = [];
 // ======================================
 
 function showMessage(text) {
-  message.textContent = text;
+  if (message) message.textContent = text;
 }
 
 function showLogin() {
@@ -80,6 +82,82 @@ async function api(path, options = {}, token = accessToken) {
   }
 
   return data;
+}
+
+// ======================================
+// SUBIR IMÁGENES A SUPABASE STORAGE
+// ======================================
+
+async function uploadProductImage(file) {
+  if (!accessToken) {
+    throw new Error("Tu sesión administrativa expiró.");
+  }
+
+  if (!file) {
+    throw new Error("No seleccionaste una imagen.");
+  }
+
+  const allowedTypes = [
+    "image/jpeg",
+    "image/png",
+    "image/webp"
+  ];
+
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error("Usa una imagen JPG, PNG o WEBP.");
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("La imagen no puede superar 5 MB.");
+  }
+
+  const extension = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp"
+  }[file.type];
+
+  const randomPart = Math.random()
+    .toString(36)
+    .slice(2);
+
+  const filePath =
+    `products/${Date.now()}-${randomPart}.${extension}`;
+
+  const encodedPath = filePath
+    .split("/")
+    .map(encodeURIComponent)
+    .join("/");
+
+  const response = await fetch(
+    `${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${encodedPath}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": file.type,
+        "x-upsert": "false"
+      },
+      body: file
+    }
+  );
+
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      result.message ||
+      result.error ||
+      result.msg ||
+      "No se pudo subir la fotografía."
+    );
+  }
+
+  return (
+    `${SUPABASE_URL}/storage/v1/object/public/` +
+    `${STORAGE_BUCKET}/${encodedPath}`
+  );
 }
 
 // ======================================
@@ -248,6 +326,38 @@ adminStyles.textContent = `
     width:100%;
     margin-top:10px;
   }
+
+  .lc-image-preview {
+    display:block;
+    width:150px;
+    height:150px;
+    object-fit:cover;
+    border-radius:12px;
+    border:1px solid #475569;
+    margin:8px 0;
+  }
+
+  .lc-gallery-image {
+    width:100px!important;
+    height:100px!important;
+    object-fit:cover;
+    border-radius:10px;
+  }
+
+  .lc-image-help {
+    color:#94a3b8;
+    font-size:12px;
+  }
+
+  .lc-file-input {
+    display:block;
+    width:100%;
+    padding:12px;
+    border:1px dashed #64748b;
+    border-radius:10px;
+    box-sizing:border-box;
+    color:white;
+  }
 `;
 
 document.head.appendChild(adminStyles);
@@ -310,7 +420,8 @@ function renderProducts(editing = null) {
       <div class="lc-product-card">
         <div class="lc-product-row">
           ${product.image_url ? `
-            <img src="${escapeHTML(product.image_url)}"
+            <img
+              src="${escapeHTML(product.image_url)}"
               alt="${escapeHTML(product.name)}"
               onerror="this.style.display='none'">
           ` : ""}
@@ -330,7 +441,9 @@ function renderProducts(editing = null) {
             Editar
           </button>
 
-          <button type="button" class="lc-secondary"
+          <button
+            type="button"
+            class="lc-secondary"
             data-toggle="${product.id}">
             ${product.active ? "Desactivar" : "Activar"}
           </button>
@@ -343,20 +456,25 @@ function renderProducts(editing = null) {
     <h3>📦 Administración de productos</h3>
 
     <form id="productForm" class="lc-form-grid">
-      <input type="hidden" id="productId"
+      <input
+        type="hidden"
+        id="productId"
         value="${escapeHTML(p.id || "")}">
 
-      <input id="productName"
+      <input
+        id="productName"
         placeholder="Nombre del producto"
         maxlength="120"
         value="${escapeHTML(p.name || "")}"
         required>
 
-      <textarea id="productDescription"
+      <textarea
+        id="productDescription"
         placeholder="Descripción del producto"
         rows="3">${escapeHTML(p.description || "")}</textarea>
 
-      <input id="productPrice"
+      <input
+        id="productPrice"
         type="number"
         min="0.01"
         max="9999999"
@@ -370,16 +488,43 @@ function renderProducts(editing = null) {
         ${categoryOptions}
       </select>
 
-      <input id="productImage"
+      <label for="productImageFile">
+        📸 Fotografía del producto
+      </label>
+
+      <input
+        id="productImageFile"
+        class="lc-file-input"
+        type="file"
+        accept="image/jpeg,image/png,image/webp">
+
+      <p class="lc-image-help">
+        JPG, PNG o WEBP. Tamaño máximo: 5 MB.
+      </p>
+
+      <img
+        id="productImagePreview"
+        class="lc-image-preview"
+        src="${escapeHTML(p.image_url || "")}"
+        alt="Vista previa de la fotografía"
+        style="${p.image_url ? "" : "display:none;"}">
+
+      <input
+        id="productImage"
         type="url"
-        placeholder="URL de la imagen (opcional)"
+        placeholder="O pega una URL de imagen"
         value="${escapeHTML(p.image_url || "")}">
 
       <select id="productActive">
-        <option value="true" ${p.active !== false ? "selected" : ""}>
+        <option
+          value="true"
+          ${p.active !== false ? "selected" : ""}>
           Activo
         </option>
-        <option value="false" ${p.active === false ? "selected" : ""}>
+
+        <option
+          value="false"
+          ${p.active === false ? "selected" : ""}>
           Inactivo
         </option>
       </select>
@@ -389,7 +534,10 @@ function renderProducts(editing = null) {
       </button>
 
       ${p.id ? `
-        <button type="button" class="lc-secondary" id="cancelEdit">
+        <button
+          type="button"
+          class="lc-secondary"
+          id="cancelEdit">
           Cancelar edición
         </button>
       ` : ""}
@@ -398,10 +546,48 @@ function renderProducts(editing = null) {
     <p id="productMessage" class="lc-status"></p>
 
     <hr>
+
     <h3>Productos registrados (${products.length})</h3>
 
     ${list || "<p>No hay productos registrados.</p>"}
   `;
+
+  const imageInput = document.getElementById("productImageFile");
+  const preview = document.getElementById("productImagePreview");
+
+  imageInput.addEventListener("change", () => {
+    const file = imageInput.files[0];
+
+    if (!file) return;
+
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp"
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      imageInput.value = "";
+      alert("Selecciona una imagen JPG, PNG o WEBP.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      imageInput.value = "";
+      alert("La imagen supera el límite de 5 MB.");
+      return;
+    }
+
+    if (preview.dataset.objectUrl) {
+      URL.revokeObjectURL(preview.dataset.objectUrl);
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+
+    preview.dataset.objectUrl = objectUrl;
+    preview.src = objectUrl;
+    preview.style.display = "block";
+  });
 
   document.getElementById("productForm")
     .addEventListener("submit", saveProduct);
@@ -424,10 +610,18 @@ function renderProducts(editing = null) {
   });
 }
 
+// ======================================
+// GUARDAR PRODUCTO E IMAGEN
+// ======================================
+
 async function saveProduct(event) {
   event.preventDefault();
 
   const productId = document.getElementById("productId").value;
+  const status = document.getElementById("productMessage");
+
+  const imageFile =
+    document.getElementById("productImageFile").files[0];
 
   const product = {
     name: document.getElementById("productName").value.trim(),
@@ -438,17 +632,33 @@ async function saveProduct(event) {
     active: document.getElementById("productActive").value === "true"
   };
 
-  const status = document.getElementById("productMessage");
-
-  if (!product.name || !product.category_id ||
-      !Number.isFinite(product.price) || product.price <= 0) {
+  if (
+    !product.name ||
+    !product.category_id ||
+    !Number.isFinite(product.price) ||
+    product.price <= 0
+  ) {
     status.textContent = "Revisa el nombre, categoría y precio.";
     return;
   }
 
-  status.textContent = "Guardando...";
+  const button = document.querySelector(
+    '#productForm button[type="submit"]'
+  );
+
+  button.disabled = true;
+
+  status.textContent = imageFile
+    ? "Subiendo fotografía..."
+    : "Guardando producto...";
 
   try {
+    if (imageFile) {
+      product.image_url = await uploadProductImage(imageFile);
+    }
+
+    status.textContent = "Guardando producto...";
+
     if (productId) {
       await api(
         "/rest/v1/lc_commerce_products?id=eq." +
@@ -459,6 +669,7 @@ async function saveProduct(event) {
           body: JSON.stringify(product)
         }
       );
+
     } else {
       await api(
         "/rest/v1/lc_commerce_products",
@@ -472,12 +683,21 @@ async function saveProduct(event) {
 
     await loadProducts();
     renderProducts();
+
     showMessage("Producto guardado correctamente.");
 
   } catch (error) {
     status.textContent = "Error: " + error.message;
+
+    if (button) {
+      button.disabled = false;
+    }
   }
 }
+
+// ======================================
+// ACTIVAR / DESACTIVAR PRODUCTO
+// ======================================
 
 async function toggleProduct(id) {
   const product = products.find(p => p.id === id);
@@ -521,11 +741,15 @@ function renderCategories(editing = null) {
       </p>
 
       <div class="lc-actions">
-        <button type="button" data-category-edit="${category.id}">
+        <button
+          type="button"
+          data-category-edit="${category.id}">
           Editar
         </button>
 
-        <button type="button" class="lc-secondary"
+        <button
+          type="button"
+          class="lc-secondary"
           data-category-toggle="${category.id}">
           ${category.active ? "Desactivar" : "Activar"}
         </button>
@@ -537,25 +761,34 @@ function renderCategories(editing = null) {
     <h3>🏷️ Administración de categorías</h3>
 
     <form id="categoryForm" class="lc-form-grid">
-      <input type="hidden" id="categoryId"
+      <input
+        type="hidden"
+        id="categoryId"
         value="${escapeHTML(c.id || "")}">
 
-      <input id="categoryName"
+      <input
+        id="categoryName"
         placeholder="Nombre de la categoría"
         maxlength="80"
         value="${escapeHTML(c.name || "")}"
         required>
 
-      <input id="categoryEmoji"
+      <input
+        id="categoryEmoji"
         placeholder="Emoji (ejemplo 🍔)"
         maxlength="12"
         value="${escapeHTML(c.emoji || "🏷️")}">
 
       <select id="categoryActive">
-        <option value="true" ${c.active !== false ? "selected" : ""}>
+        <option
+          value="true"
+          ${c.active !== false ? "selected" : ""}>
           Activa
         </option>
-        <option value="false" ${c.active === false ? "selected" : ""}>
+
+        <option
+          value="false"
+          ${c.active === false ? "selected" : ""}>
           Inactiva
         </option>
       </select>
@@ -565,7 +798,9 @@ function renderCategories(editing = null) {
       </button>
 
       ${c.id ? `
-        <button type="button" class="lc-secondary"
+        <button
+          type="button"
+          class="lc-secondary"
           id="cancelCategoryEdit">
           Cancelar edición
         </button>
@@ -575,7 +810,9 @@ function renderCategories(editing = null) {
     <p id="categoryMessage" class="lc-status"></p>
 
     <hr>
+
     <h3>Categorías registradas (${categories.length})</h3>
+
     ${list || "<p>No hay categorías.</p>"}
   `;
 
@@ -635,6 +872,7 @@ async function saveCategory(event) {
           body: JSON.stringify(category)
         }
       );
+
     } else {
       await api(
         "/rest/v1/lc_commerce_categories",
@@ -649,6 +887,7 @@ async function saveCategory(event) {
     await loadCategories();
     await loadProducts();
     renderCategories();
+
     showMessage("Categoría guardada correctamente.");
 
   } catch (error) {
@@ -692,6 +931,74 @@ async function toggleCategory(id) {
   } catch (error) {
     alert("No se pudo actualizar la categoría: " + error.message);
   }
+}
+
+// ======================================
+// GALERÍA DE IMÁGENES
+// ======================================
+
+function renderImageGallery() {
+  const gallery = products.filter(product => product.image_url);
+
+  workspace.innerHTML = `
+    <h3>🖼️ Galería de imágenes</h3>
+
+    <p>
+      Administra las fotografías de los productos de tu tienda.
+    </p>
+
+    <button type="button" id="addImageProduct">
+      + Agregar producto con fotografía
+    </button>
+
+    <hr>
+
+    <h3>Fotografías registradas (${gallery.length})</h3>
+
+    ${
+      gallery.length
+        ? gallery.map(product => `
+          <div class="lc-product-card">
+            <div class="lc-product-row">
+              <img
+                class="lc-gallery-image"
+                src="${escapeHTML(product.image_url)}"
+                alt="${escapeHTML(product.name)}"
+                onerror="this.style.display='none'">
+
+              <div>
+                <strong>${escapeHTML(product.name)}</strong>
+
+                <p>
+                  $${Number(product.price).toFixed(2)} MXN
+                </p>
+
+                <button
+                  type="button"
+                  data-image-edit="${product.id}">
+                  Cambiar fotografía
+                </button>
+              </div>
+            </div>
+          </div>
+        `).join("")
+        : "<p>Todavía no hay fotografías cargadas.</p>"
+    }
+  `;
+
+  document.getElementById("addImageProduct").onclick = () => {
+    renderProducts();
+  };
+
+  workspace.querySelectorAll("[data-image-edit]").forEach(button => {
+    button.onclick = () => {
+      const product = products.find(
+        item => item.id === button.dataset.imageEdit
+      );
+
+      if (product) renderProducts(product);
+    };
+  });
 }
 
 // ======================================
@@ -1065,10 +1372,7 @@ document.getElementById("ordersBtn").onclick = () => {
 };
 
 document.getElementById("imagesBtn").onclick = () => {
-  workspace.innerHTML = `
-    <h3>🖼️ Imágenes</h3>
-    <p>Sección en preparación.</p>
-  `;
+  renderImageGallery();
 };
 
 // No recuperar sesiones anteriores.
