@@ -110,8 +110,6 @@ function normalizePhone(value) {
 function validatePhone(value) {
   const phone = normalizePhone(value);
 
-  // Acepta 10 dígitos mexicanos
-  // o 12 dígitos comenzando con 52.
   if (/^\d{10}$/.test(phone)) {
     return phone;
   }
@@ -203,7 +201,7 @@ function setCat(category) {
 }
 
 // ===================================
-// MOSTRAR PRODUCTOS
+// MOSTRAR PRODUCTOS CON FOTOGRAFÍAS
 // ===================================
 
 function renderProducts() {
@@ -233,13 +231,27 @@ function renderProducts() {
     );
 
     const emoji = category?.emoji || "🛍️";
+    const imageUrl = String(product.image_url || "").trim();
 
-    const photo = product.image_url
-      ? `<img src="${escapeHTML(product.image_url)}"
-              alt="${escapeHTML(product.name)}"
-              loading="lazy"
-              style="width:100%;height:100%;object-fit:cover;">`
-      : emoji;
+    const photo = imageUrl
+      ? `
+        <img
+          src="${escapeHTML(imageUrl)}"
+          alt="${escapeHTML(product.name)}"
+          loading="lazy"
+          style="display:block;width:100%;height:100%;object-fit:cover;"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+
+        <div
+          style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:48px;">
+          ${escapeHTML(emoji)}
+        </div>
+      `
+      : `
+        <div style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:48px;">
+          ${escapeHTML(emoji)}
+        </div>
+      `;
 
     return `
       <article class="card">
@@ -262,7 +274,7 @@ function renderProducts() {
 
           <button
             class="add"
-            data-add="${product.id}">
+            data-add="${escapeHTML(product.id)}">
             + Agregar
           </button>
         </div>
@@ -463,7 +475,6 @@ async function createOrder() {
     throw new Error("Escribe tu nombre");
   }
 
-  // El teléfono ahora es obligatorio.
   const phone = validatePhone(rawPhone);
 
   if (!["recoger", "domicilio"].includes(delivery)) {
