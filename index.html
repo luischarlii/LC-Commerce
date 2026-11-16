@@ -1,37 +1,26 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-
   <meta name="viewport"
-        content="width=device-width,
-        initial-scale=1,
-        viewport-fit=cover">
-
+        content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b1020">
-
-  <meta name="apple-mobile-web-app-capable"
-        content="yes">
-
-  <meta name="mobile-web-app-capable"
-        content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
 
   <link rel="manifest" href="./manifest.json">
-
   <title>LC Commerce</title>
-
   <link rel="stylesheet" href="./style.css">
 </head>
 
 <body>
 
 <header class="top">
-
   <div>
     <div class="brand">
       LC <span>Commerce</span>
     </div>
-
     <div class="sub">
       Menú y pedidos por WhatsApp
     </div>
@@ -40,138 +29,95 @@
   <button id="cartBtn" class="cart">
     🛒 <b id="cartCount">0</b>
   </button>
-
 </header>
 
-
 <section class="hero">
-
   <div>
-
-    <h1>
-      Bienvenido 👋
-    </h1>
-
+    <h1>Bienvenido 👋</h1>
     <p>
       Elige tus productos, revisa tu pedido
       y envíalo por WhatsApp.
     </p>
-
   </div>
-
 </section>
-
 
 <nav id="categories" class="cats"></nav>
 
-
 <main id="products" class="products"></main>
-
 
 <!-- CARRITO -->
 
 <div id="cartPanel" class="drawer hidden">
-
   <div class="drawerBox">
 
     <div class="drawerHead">
-
-      <h2>
-        🛒 Tu pedido
-      </h2>
-
-      <button id="closeCart">
-        ✕
-      </button>
-
+      <h2>🛒 Tu pedido</h2>
+      <button id="closeCart">✕</button>
     </div>
-
 
     <div id="cartItems"></div>
 
-
     <div class="total">
-
-      <span>
-        Total
-      </span>
-
-      <strong id="total">
-        $0.00
-      </strong>
-
+      <span>Total</span>
+      <strong id="total">$0.00</strong>
     </div>
 
-
-    <label>
-      Nombre
-    </label>
-
+    <label for="customerName">Nombre</label>
     <input
       id="customerName"
-      placeholder="Tu nombre">
+      type="text"
+      placeholder="Tu nombre"
+      autocomplete="name"
+      required>
 
+    <label for="customerPhone">Teléfono / WhatsApp</label>
+    <input
+      id="customerPhone"
+      type="tel"
+      placeholder="Ej. 6561234567"
+      autocomplete="tel"
+      inputmode="tel"
+      required>
 
-    <label>
-      Entrega
-    </label>
+    <small class="note">
+      Incluye tu número de 10 dígitos. Se utilizará
+      para contactarte sobre tu pedido.
+    </small>
 
+    <label for="delivery">Entrega</label>
     <select id="delivery">
-
       <option value="recoger">
         🏪 Recoger en el local
       </option>
-
       <option value="domicilio">
         🛵 Envío a domicilio
       </option>
-
     </select>
 
-
-    <label>
-      Dirección / referencia
-    </label>
-
+    <label for="address">Dirección / referencia</label>
     <textarea
       id="address"
       rows="2"
       placeholder="Calle, número, colonia y referencia">
     </textarea>
 
-
-    <button
-      id="whatsappBtn"
-      class="primary">
-
+    <button id="whatsappBtn" class="primary">
       📲 Enviar pedido por WhatsApp
-
     </button>
 
-
-    <button
-      id="payBtn"
-      class="pay">
-
+    <button id="payBtn" class="pay">
       💳 Pagar con Mercado Pago
-
     </button>
-
 
     <p class="note">
-
-      El botón de pago se conectará
-      posteriormente al enlace de Mercado Pago.
-
+      El botón de pago se conectará posteriormente
+      al enlace de Mercado Pago.
     </p>
 
   </div>
-
 </div>
 
-
 <div id="toast"></div>
-
 
 <script src="./app.js"></script>
 
