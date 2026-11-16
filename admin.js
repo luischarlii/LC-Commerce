@@ -2,7 +2,7 @@
 "use strict";
 
 // ======================================
-// CONFIGURACIÓN
+// CONFIGURACIÓN LC COMMERCE
 // ======================================
 
 const SUPABASE_URL = "https://fwacwaptqxhygifqfnsc.supabase.co";
@@ -109,10 +109,8 @@ async function verifyAdmin() {
   } catch (error) {
     accessToken = "";
     currentUser = null;
-
     showLogin();
     showMessage(error.message);
-
     return false;
   }
 }
@@ -170,14 +168,13 @@ document.getElementById("logoutBtn").onclick = async () => {
 
   accessToken = "";
   currentUser = null;
-
   loginForm.reset();
   showLogin();
   showMessage("Sesión cerrada.");
 };
 
 // ======================================
-// ESTILOS DEL PANEL
+// ESTILOS
 // ======================================
 
 const adminStyles = document.createElement("style");
@@ -228,6 +225,28 @@ adminStyles.textContent = `
   .lc-status {
     color:#fbbf24;
     font-size:13px;
+  }
+
+  .lc-whatsapp {
+    display:block;
+    text-align:center;
+    background:#15803d;
+    color:white;
+    padding:12px;
+    margin:12px 0;
+    border-radius:9px;
+    text-decoration:none;
+    font-weight:bold;
+  }
+
+  .lc-paid {
+    background:#166534!important;
+    color:white!important;
+  }
+
+  .lc-payment-button {
+    width:100%;
+    margin-top:10px;
   }
 `;
 
@@ -630,7 +649,6 @@ async function saveCategory(event) {
     await loadCategories();
     await loadProducts();
     renderCategories();
-
     showMessage("Categoría guardada correctamente.");
 
   } catch (error) {
@@ -706,6 +724,112 @@ function formatDate(date) {
   });
 }
 
+// ======================================
+// WHATSAPP
+// ======================================
+
+function getWhatsAppLink(order) {
+  let phone = String(order.customer_phone || "").replace(/\D/g, "");
+
+  if (phone.length === 10) {
+    phone = "52" + phone;
+  }
+
+  if (!phone || phone.length < 11) return "";
+
+  const shortId = String(order.id).slice(0, 8);
+
+  const message =
+    `Hola ${order.customer_name}, te contactamos de LC Commerce. ` +
+    `Tu pedido #${shortId} tiene un total de $${Number(order.total).toFixed(2)} MXN. ` +
+    `Estamos dando seguimiento a tu compra. ¡Gracias!`;
+
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+// ======================================
+// CONFIRMAR PAGO MANUALMENTE
+// ======================================
+
+async function confirmOrderPayment(orderId) {
+  const order = orders.find(item => item.id === orderId);
+  if (!order) return;
+
+  if (order.payment_status === "pagado") {
+    alert("Este pedido ya aparece como pagado.");
+    return;
+  }
+
+  const accepted = confirm(
+    "¿Confirmas que recibiste el dinero de este pedido?\n\n" +
+    "Esta acción marcará el pago como PAGADO."
+  );
+
+  if (!accepted) return;
+
+  const button = workspace.querySelector(
+    `[data-payment="${orderId}"]`
+  );
+
+  const statusMessage = document.getElementById(
+    `orderMessage-${orderId}`
+  );
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Guardando...";
+  }
+
+  try {
+    await api(
+      "/rest/v1/lc_commerce_orders?id=eq." +
+      encodeURIComponent(orderId),
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({
+          payment_status: "pagado"
+        })
+      }
+    );
+
+    order.payment_status = "pagado";
+
+    const paymentLabel = document.getElementById(
+      `paymentStatus-${orderId}`
+    );
+
+    if (paymentLabel) {
+      paymentLabel.textContent = "PAGADO";
+    }
+
+    if (button) {
+      button.textContent = "✓ Pago confirmado";
+      button.disabled = true;
+    }
+
+    if (statusMessage) {
+      statusMessage.textContent =
+        "Pago confirmado y guardado correctamente.";
+    }
+
+  } catch (error) {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "✓ Confirmar pago";
+    }
+
+    if (statusMessage) {
+      statusMessage.textContent =
+        "Error al confirmar: " + error.message;
+    }
+  }
+}
+
+// ======================================
+// MOSTRAR PEDIDOS
+// ======================================
+
 function renderOrders() {
   const statusOptions = [
     ["pendiente", "Pendiente"],
@@ -751,9 +875,12 @@ function renderOrders() {
       </div>
     `).join("");
 
+    const whatsappLink = getWhatsAppLink(order);
+    const isPaid = order.payment_status === "pagado";
+
     return `
       <div class="lc-product-card">
-        <h3>🧾 Pedido</h3>
+        <h3>🧾 Pedido #${escapeHTML(String(order.id).slice(0, 8))}</h3>
 
         <p>
           <strong>Cliente:</strong>
@@ -764,6 +891,17 @@ function renderOrders() {
           <strong>Teléfono:</strong>
           ${escapeHTML(order.customer_phone || "No proporcionado")}
         </p>
+
+        ${
+          whatsappLink
+            ? `<a class="lc-whatsapp"
+                href="${escapeHTML(whatsappLink)}"
+                target="_blank"
+                rel="noopener noreferrer">
+                💬 Contactar por WhatsApp
+              </a>`
+            : `<p class="lc-status">No hay teléfono válido para WhatsApp.</p>`
+        }
 
         <p>
           <strong>Entrega:</strong>
@@ -801,8 +939,10 @@ function renderOrders() {
         </select>
 
         <p>
-          <strong>Pago:</strong>
-          ${escapeHTML(order.payment_status || "pendiente")}
+          <strong>Estado del pago:</strong>
+          <span id="paymentStatus-${order.id}">
+            ${escapeHTML(order.payment_status || "pendiente")}
+          </span>
         </p>
 
         ${
@@ -810,6 +950,14 @@ function renderOrders() {
             ? `<p><strong>Referencia:</strong> ${escapeHTML(order.payment_reference)}</p>`
             : ""
         }
+
+        <button
+          type="button"
+          class="lc-payment-button ${isPaid ? "lc-paid" : ""}"
+          data-payment="${order.id}"
+          ${isPaid ? "disabled" : ""}>
+          ${isPaid ? "✓ Pago confirmado" : "✓ Confirmar pago"}
+        </button>
 
         <p class="lc-status" id="orderMessage-${order.id}"></p>
       </div>
@@ -877,6 +1025,12 @@ function renderOrders() {
       }
     };
   });
+
+  workspace.querySelectorAll("[data-payment]").forEach(button => {
+    button.onclick = () => {
+      confirmOrderPayment(button.dataset.payment);
+    };
+  });
 }
 
 async function openOrders() {
@@ -918,7 +1072,6 @@ document.getElementById("imagesBtn").onclick = () => {
 };
 
 // No recuperar sesiones anteriores.
-// El accesoToken comienza vacío en cada apertura.
 if (!accessToken) {
   showLogin();
 }
