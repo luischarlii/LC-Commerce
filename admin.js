@@ -85,6 +85,85 @@ async function api(path, options = {}, token = accessToken) {
 }
 
 // ======================================
+// COMPRESIÓN AUTOMÁTICA DE FOTOGRAFÍAS
+// ======================================
+
+async function compressProductImage(file) {
+  if (!file || !file.type.startsWith("image/")) {
+    throw new Error("Selecciona una fotografía válida.");
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    const image = new Image();
+    image.src = objectUrl;
+
+    await new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = () => reject(
+        new Error("No se pudo leer la fotografía.")
+      );
+    });
+
+    const maxSize = 1200;
+
+    const scale = Math.min(
+      1,
+      maxSize / Math.max(image.width, image.height)
+    );
+
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+
+    const canvas = document.createElement("canvas");
+
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error("No se pudo procesar la fotografía.");
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+
+    // Intentar WebP primero.
+    let blob = await new Promise(resolve => {
+      canvas.toBlob(resolve, "image/webp", 0.80);
+    });
+
+    // Si el navegador no genera WebP, utilizar JPG.
+    if (!blob || blob.type !== "image/webp") {
+      blob = await new Promise(resolve => {
+        canvas.toBlob(resolve, "image/jpeg", 0.84);
+      });
+    }
+
+    if (!blob || !blob.size) {
+      throw new Error("No se pudo comprimir la fotografía.");
+    }
+
+    const extension = blob.type === "image/webp"
+      ? "webp"
+      : "jpg";
+
+    return new File(
+      [blob],
+      `lc-product-${Date.now()}.${extension}`,
+      {
+        type: blob.type,
+        lastModified: Date.now()
+      }
+    );
+
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+// ======================================
 // SUBIR IMÁGENES A SUPABASE STORAGE
 // ======================================
 
@@ -108,7 +187,7 @@ async function uploadProductImage(file) {
   }
 
   if (file.size > 5 * 1024 * 1024) {
-    throw new Error("La imagen no puede superar 5 MB.");
+    throw new Error("La imagen optimizada supera 5 MB.");
   }
 
   const extension = {
@@ -116,6 +195,10 @@ async function uploadProductImage(file) {
     "image/png": "png",
     "image/webp": "webp"
   }[file.type];
+
+  if (!extension) {
+    throw new Error("Formato de imagen no compatible.");
+  }
 
   const randomPart = Math.random()
     .toString(36)
@@ -499,7 +582,8 @@ function renderProducts(editing = null) {
         accept="image/jpeg,image/png,image/webp">
 
       <p class="lc-image-help">
-        JPG, PNG o WEBP. Tamaño máximo: 5 MB.
+        JPG, PNG o WEBP. Tamaño máximo original: 5 MB.
+        Se optimizará automáticamente antes de subir.
       </p>
 
       <img
@@ -649,12 +733,32 @@ async function saveProduct(event) {
   button.disabled = true;
 
   status.textContent = imageFile
-    ? "Subiendo fotografía..."
+    ? "Preparando fotografía..."
     : "Guardando producto...";
 
   try {
     if (imageFile) {
-      product.image_url = await uploadProductImage(imageFile);
+      status.textContent = "Comprimiendo fotografía...";
+
+      const compressedImage = await compressProductImage(imageFile);
+
+      const originalKB = Math.round(imageFile.size / 1024);
+      const compressedKB = Math.round(compressedImage.size / 1024);
+
+      const savedPercent = imageFile.size > 0
+        ? Math.max(
+            0,
+            Math.round(
+              (1 - compressedImage.size / imageFile.size) * 100
+            )
+          )
+        : 0;
+
+      status.textContent =
+        `Optimizada: ${originalKB} KB → ${compressedKB} KB. ` +
+        `Ahorro: ${savedPercent}%. Subiendo...`;
+
+      product.image_url = await uploadProductImage(compressedImage);
     }
 
     status.textContent = "Guardando producto...";
