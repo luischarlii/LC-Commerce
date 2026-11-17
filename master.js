@@ -21,7 +21,7 @@ const supabase = window.supabase.createClient(
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true
+      detectSessionInUrl: false
     }
   }
 );
@@ -40,6 +40,11 @@ const createStoreForm = document.getElementById("createStoreForm");
 const storesList = document.getElementById("storesList");
 const createStoreBtn = document.getElementById("createStoreBtn");
 
+const loginButton = loginForm.querySelector("button");
+
+let initializing = true;
+let loginInProgress = false;
+
 // ==========================================
 // MENSAJES
 // ==========================================
@@ -48,11 +53,6 @@ function showMessage(message, type = "success") {
   messageBox.textContent = message;
   messageBox.className = type;
   messageBox.style.display = "block";
-
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
 }
 
 function clearMessage() {
@@ -81,6 +81,9 @@ function showMaster() {
 
 loginForm.addEventListener("submit", async event => {
   event.preventDefault();
+
+  if (initializing || loginInProgress) return;
+
   clearMessage();
 
   const email =
@@ -89,10 +92,14 @@ loginForm.addEventListener("submit", async event => {
   const password =
     document.getElementById("loginPassword").value;
 
-  const button = loginForm.querySelector("button");
+  if (!email || !password) {
+    showMessage("Escribe tu correo y contraseña.", "error");
+    return;
+  }
 
-  button.disabled = true;
-  button.textContent = "Verificando...";
+  loginInProgress = true;
+  loginButton.disabled = true;
+  loginButton.textContent = "Verificando...";
 
   try {
     const { data, error } =
@@ -103,26 +110,46 @@ loginForm.addEventListener("submit", async event => {
 
     if (error) throw error;
 
-    if (!data.session) {
-      throw new Error("No se pudo iniciar la sesión.");
+    if (!data.session || !data.user) {
+      throw new Error(
+        "Supabase no devolvió una sesión válida."
+      );
+    }
+
+    // Confirmar que la sesión quedó guardada.
+    const {
+      data: { session },
+      error: sessionError
+    } = await supabase.auth.getSession();
+
+    if (sessionError) throw sessionError;
+
+    if (!session) {
+      throw new Error(
+        "El acceso fue aceptado, pero no se pudo recuperar la sesión."
+      );
     }
 
     showMaster();
     await loadStores();
 
-    showMessage("Sesión iniciada correctamente.");
+    showMessage("Acceso maestro iniciado correctamente.");
 
   } catch (error) {
-    console.error("Error de acceso:", error);
+    console.error("Error de acceso maestro:", error);
+
+    showLogin();
 
     showMessage(
-      error.message || "No se pudo iniciar sesión.",
+      "No se pudo acceder: " +
+      (error.message || "Error desconocido."),
       "error"
     );
 
   } finally {
-    button.disabled = false;
-    button.textContent = "Iniciar sesión";
+    loginInProgress = false;
+    loginButton.disabled = false;
+    loginButton.textContent = "Iniciar sesión";
   }
 });
 
@@ -133,7 +160,12 @@ loginForm.addEventListener("submit", async event => {
 document.getElementById("logoutBtn")
   .addEventListener("click", async () => {
 
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      showMessage(error.message, "error");
+      return;
+    }
 
     showLogin();
     storesList.innerHTML = "";
@@ -142,22 +174,43 @@ document.getElementById("logoutBtn")
   });
 
 // ==========================================
-// COMPROBAR SESIÓN AL ABRIR
+// COMPROBAR SESIÓN INICIAL
 // ==========================================
 
 async function checkSession() {
-  const {
-    data: { session },
-    error
-  } = await supabase.auth.getSession();
+  loginButton.disabled = true;
+  loginButton.textContent = "Comprobando acceso...";
 
-  if (error || !session) {
+  try {
+    const {
+      data: { session },
+      error
+    } = await supabase.auth.getSession();
+
+    if (error) throw error;
+
+    if (session) {
+      showMaster();
+      await loadStores();
+    } else {
+      showLogin();
+    }
+
+  } catch (error) {
+    console.error("Error comprobando sesión:", error);
+
     showLogin();
-    return;
-  }
 
-  showMaster();
-  await loadStores();
+    showMessage(
+      "No se pudo comprobar la sesión: " + error.message,
+      "error"
+    );
+
+  } finally {
+    initializing = false;
+    loginButton.disabled = false;
+    loginButton.textContent = "Iniciar sesión";
+  }
 }
 
 // ==========================================
@@ -176,7 +229,7 @@ async function loadStores() {
 
     if (error) throw error;
 
-    if (!data || !data.length) {
+    if (!data || data.length === 0) {
       storesList.innerHTML =
         '<p class="note">Todavía no hay tiendas registradas.</p>';
       return;
@@ -184,7 +237,6 @@ async function loadStores() {
 
     storesList.innerHTML = data.map(store => `
       <div class="store">
-
         <div class="store-name">
           ${escapeHTML(store.name)}
         </div>
@@ -200,7 +252,6 @@ async function loadStores() {
         <span class="status">
           ${escapeHTML(store.status)}
         </span>
-
       </div>
     `).join("");
 
@@ -208,10 +259,11 @@ async function loadStores() {
     console.error("Error cargando tiendas:", error);
 
     storesList.innerHTML =
-      '<p class="note">No se pudo consultar el listado. Revisa los permisos de lectura de lc_commerce_stores.</p>';
+      '<p class="note">No se pudo consultar el listado de tiendas.</p>';
 
     showMessage(
-      "Error al consultar tiendas: " + error.message,
+      "La sesión está iniciada, pero no se pudieron consultar las tiendas: " +
+      error.message,
       "error"
     );
   }
@@ -235,10 +287,7 @@ createStoreForm.addEventListener("submit", async event => {
     document.getElementById("ownerEmail").value.trim().toLowerCase();
 
   if (!storeName || !slug || !ownerEmail) {
-    showMessage(
-      "Completa todos los campos.",
-      "error"
-    );
+    showMessage("Completa todos los campos.", "error");
     return;
   }
 
@@ -290,8 +339,7 @@ createStoreForm.addEventListener("submit", async event => {
     createStoreForm.reset();
 
     showMessage(
-      "Tienda creada e invitación enviada a " +
-      ownerEmail
+      "Tienda creada e invitación enviada a " + ownerEmail
     );
 
     await loadStores();
