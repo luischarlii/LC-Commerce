@@ -12,7 +12,7 @@ const SUPABASE_URL =
 const SUPABASE_KEY =
   "sb_publishable_aB8Bk75Nidcd-pCeba5NmQ_cgOPOqnp";
 
-// Configuración provisional del negocio
+// Configuración del negocio
 const WHATSAPP_NUMBER = "526144180552";
 const MERCADO_PAGO_URL = "";
 
@@ -58,11 +58,10 @@ function loadStoreCart() {
 
     if (stored !== null) {
       savedCart = JSON.parse(stored);
+
     } else if (
       getStoreSlug() === DEFAULT_STORE_SLUG
     ) {
-      // Migrar el carrito antiguo de LC Commerce
-      // Principal sin perder sus productos.
       const legacyCart = localStorage.getItem(
         "lcCommerceCart"
       );
@@ -76,6 +75,7 @@ function loadStoreCart() {
         );
       }
     }
+
   } catch (error) {
     console.error(
       "Error leyendo carrito:",
@@ -217,8 +217,6 @@ async function loadStore() {
   currentStore = store;
   currentStoreId = store.id;
 
-  // Cargar el carrito correspondiente
-  // exclusivamente a esta tienda.
   loadStoreCart();
 
   console.log(
@@ -246,7 +244,7 @@ async function loadStore() {
 }
 
 // ===================================
-// VALIDAR TELÉFONO
+// VALIDAR TELÉFONO DEL CLIENTE
 // ===================================
 
 function normalizePhone(value) {
@@ -304,8 +302,6 @@ async function loadCatalog() {
     categories = categoryData || [];
     products = productData || [];
 
-    // Eliminar del carrito productos que no
-    // pertenecen al catálogo de esta tienda.
     cart = cart.filter(item =>
       products.some(product =>
         product.id === item.id
@@ -558,6 +554,7 @@ function add(id) {
     }
 
     item.qty++;
+
   } else {
     cart.push({
       id,
@@ -594,7 +591,6 @@ function change(id, difference) {
 }
 
 function save() {
-  // No guardar hasta identificar la tienda.
   if (currentStore?.slug) {
     localStorage.setItem(
       getCartStorageKey(),
@@ -635,7 +631,7 @@ function getTotal() {
 }
 
 // ===================================
-// MOSTRAR CARRITO
+// MOSTRAR CARRITO CON FOTOS ORIGINALES
 // ===================================
 
 function renderCart() {
@@ -674,11 +670,65 @@ function renderCart() {
         category.id === product.category_id
       );
 
+    const emoji =
+      category?.emoji || "🛍️";
+
+    const imageUrl =
+      String(product.image_url || "").trim();
+
+    const photo = imageUrl
+      ? `
+        <img
+          src="${escapeHTML(imageUrl)}"
+          alt="${escapeHTML(product.name)}"
+          loading="lazy"
+          decoding="async"
+          style="
+            display:block;
+            width:64px;
+            height:64px;
+            object-fit:cover;
+            border-radius:10px;
+          "
+          onerror="
+            this.style.display='none';
+            this.nextElementSibling.style.display='flex';
+          "
+        >
+
+        <div
+          style="
+            display:none;
+            width:64px;
+            height:64px;
+            align-items:center;
+            justify-content:center;
+            font-size:30px;
+          "
+        >
+          ${escapeHTML(emoji)}
+        </div>
+      `
+      : `
+        <div
+          style="
+            display:flex;
+            width:64px;
+            height:64px;
+            align-items:center;
+            justify-content:center;
+            font-size:30px;
+          "
+        >
+          ${escapeHTML(emoji)}
+        </div>
+      `;
+
     return `
       <div class="item">
 
         <div class="emoji">
-          ${escapeHTML(category?.emoji || "🛍️")}
+          ${photo}
         </div>
 
         <div class="itemMain">
@@ -806,8 +856,6 @@ async function createOrder() {
     throw new Error("El carrito supera el máximo de 30 productos");
   }
 
-  // Comprobar que todos los productos del carrito
-  // pertenecen al catálogo de la tienda actual.
   for (const item of cart) {
     const product = products.find(
       product => product.id === item.id
@@ -830,13 +878,7 @@ async function createOrder() {
     quantity: item.qty
   }));
 
-  /*
-   * NUEVA FUNCIÓN SQL:
-   * Recibirá seis parámetros.
-   *
-   * No publicar este archivo hasta instalar
-   * la función SQL compatible.
-   */
+  // Función SQL nueva de seis parámetros.
 
   const result = await supabaseRequest(
     "rpc/lc_commerce_create_order",
@@ -879,17 +921,22 @@ async function createOrder() {
 }
 
 // ===================================
-// WHATSAPP
+// WHATSAPP DEL NEGOCIO
 // ===================================
 
 async function sendWhatsApp() {
   if (submitting) return;
 
+  // El destinatario siempre es el negocio.
+  const businessPhone =
+    normalizePhone(WHATSAPP_NUMBER);
+
   if (
-    !/^\d{10,15}$/.test(WHATSAPP_NUMBER) ||
-    WHATSAPP_NUMBER === "5210000000000"
+    !/^52\d{10}$/.test(businessPhone)
   ) {
-    return toast("Configura el WhatsApp del negocio");
+    return toast(
+      "Configura el WhatsApp del negocio"
+    );
   }
 
   submitting = true;
@@ -941,9 +988,11 @@ async function sendWhatsApp() {
       "Pedido registrado. Pendiente de confirmación."
     );
 
+    // IMPORTANTE:
+    // El número del cliente NO se usa como destinatario.
     const url =
       "https://wa.me/" +
-      WHATSAPP_NUMBER +
+      businessPhone +
       "?text=" +
       encodeURIComponent(lines.join("\n"));
 
@@ -1031,7 +1080,7 @@ function toast(message) {
 }
 
 // ===================================
-// INICIAR APLICACIÓN
+// EVENTOS DE LA APLICACIÓN
 // ===================================
 
 document.getElementById("cartBtn")
@@ -1040,8 +1089,32 @@ document.getElementById("cartBtn")
 document.getElementById("closeCart")
   ?.addEventListener("click", closeCart);
 
-document.getElementById("whatsappBtn")
-  ?.addEventListener("click", sendWhatsApp);
+// ===================================
+// WHATSAPP: CONTROL DEL DESTINATARIO
+// ===================================
+
+const whatsappButton =
+  document.getElementById("whatsappBtn");
+
+if (whatsappButton) {
+  whatsappButton.removeAttribute("href");
+  whatsappButton.removeAttribute("onclick");
+
+  whatsappButton.addEventListener(
+    "click",
+    event => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      sendWhatsApp();
+    },
+    true
+  );
+}
+
+// ===================================
+// MERCADO PAGO
+// ===================================
 
 document.getElementById("payBtn")
   ?.addEventListener("click", payOrder);
@@ -1049,7 +1122,7 @@ document.getElementById("payBtn")
 updateCount();
 
 // ===================================
-// ARRANQUE
+// INICIAR APLICACIÓN
 // ===================================
 
 (async function init() {
