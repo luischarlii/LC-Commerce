@@ -3,11 +3,11 @@
 
 // ======================================
 // CONFIGURACIÓN LC COMMERCE
+// ADMINISTRACIÓN MULTI-NEGOCIO
 // ======================================
 
 const SUPABASE_URL = "https://fwacwaptqxhygifqfnsc.supabase.co";
 const SUPABASE_KEY = "sb_publishable_aB8Bk75Nidcd-pCeba5NmQ_cgOPOqnp";
-
 const STORAGE_BUCKET = "lc-commerce-images";
 
 const loginPanel = document.getElementById("loginPanel");
@@ -18,6 +18,9 @@ const workspace = document.getElementById("workspace");
 
 let accessToken = "";
 let currentUser = null;
+let currentStore = null;
+let currentStoreId = "";
+
 let categories = [];
 let products = [];
 let orders = [];
@@ -49,6 +52,32 @@ function escapeHTML(value) {
     '"': "&quot;",
     "'": "&#39;"
   })[c]);
+}
+
+function storeFilter() {
+  if (!currentStoreId) {
+    throw new Error("No hay un negocio seleccionado.");
+  }
+
+  return "store_id=eq." + encodeURIComponent(currentStoreId);
+}
+
+function storeBanner() {
+  if (!currentStore) return "";
+
+  return `
+    <div class="lc-product-card"
+      style="border-color:#fbbf24;background:#172033">
+      <strong>🏪 ${escapeHTML(currentStore.name)}</strong>
+      <p class="lc-status">
+        Tu administración está limitada a este negocio.
+      </p>
+    </div>
+  `;
+}
+
+function showWorkspace(html) {
+  workspace.innerHTML = storeBanner() + html;
 }
 
 async function api(path, options = {}, token = accessToken) {
@@ -85,6 +114,65 @@ async function api(path, options = {}, token = accessToken) {
 }
 
 // ======================================
+// RESOLVER NEGOCIO DEL PROPIETARIO
+// ======================================
+
+async function loadCurrentStore() {
+  const memberships = await api(
+    "/rest/v1/lc_commerce_store_members" +
+    "?select=store_id,role,created_at" +
+    "&user_id=eq." +
+    encodeURIComponent(currentUser.id) +
+    "&order=created_at.asc"
+  );
+
+  if (!Array.isArray(memberships) || memberships.length === 0) {
+    throw new Error(
+      "Esta cuenta todavía no está vinculada a un negocio. " +
+      "Solicita al administrador que revise tu invitación."
+    );
+  }
+
+  const ownerMemberships = memberships.filter(
+    item => item.role === "owner"
+  );
+
+  if (ownerMemberships.length === 0) {
+    throw new Error(
+      "Tu cuenta no tiene el rol de propietario."
+    );
+  }
+
+  if (ownerMemberships.length > 1) {
+    throw new Error(
+      "Tu cuenta tiene varios negocios asignados. " +
+      "Por seguridad, necesitamos seleccionar uno antes de continuar."
+    );
+  }
+
+  currentStoreId = ownerMemberships[0].store_id;
+
+  const stores = await api(
+    "/rest/v1/lc_commerce_stores" +
+    "?select=id,name,slug,status" +
+    "&id=eq." +
+    encodeURIComponent(currentStoreId)
+  );
+
+  if (!Array.isArray(stores) || stores.length === 0) {
+    throw new Error("No se encontró el negocio asignado.");
+  }
+
+  currentStore = stores[0];
+
+  if (!["active", "setup"].includes(currentStore.status)) {
+    throw new Error(
+      "Este negocio no está habilitado para administración."
+    );
+  }
+}
+
+// ======================================
 // COMPRESIÓN AUTOMÁTICA DE FOTOGRAFÍAS
 // ======================================
 
@@ -117,7 +205,6 @@ async function compressProductImage(file) {
     const height = Math.max(1, Math.round(image.height * scale));
 
     const canvas = document.createElement("canvas");
-
     canvas.width = width;
     canvas.height = height;
 
@@ -170,6 +257,10 @@ async function uploadProductImage(file) {
     throw new Error("Tu sesión administrativa expiró.");
   }
 
+  if (!currentStoreId) {
+    throw new Error("No se identificó el negocio.");
+  }
+
   if (!file) {
     throw new Error("No seleccionaste una imagen.");
   }
@@ -194,16 +285,14 @@ async function uploadProductImage(file) {
     "image/webp": "webp"
   }[file.type];
 
-  if (!extension) {
-    throw new Error("Formato de imagen no compatible.");
-  }
-
   const randomPart = Math.random()
     .toString(36)
     .slice(2);
 
+  // Cada negocio tiene su propia carpeta.
   const filePath =
-    `products/${Date.now()}-${randomPart}.${extension}`;
+    `stores/${currentStoreId}/products/` +
+    `${Date.now()}-${randomPart}.${extension}`;
 
   const encodedPath = filePath
     .split("/")
@@ -231,7 +320,8 @@ async function uploadProductImage(file) {
       result.message ||
       result.error ||
       result.msg ||
-      "No se pudo subir la fotografía."
+      "No se pudo subir la fotografía. " +
+      "Es posible que falte autorizar la carpeta del negocio en Storage."
     );
   }
 
@@ -251,14 +341,7 @@ async function verifyAdmin() {
   try {
     currentUser = await api("/auth/v1/user");
 
-    const admins = await api(
-      "/rest/v1/lc_commerce_admins?select=user_id&user_id=eq." +
-      encodeURIComponent(currentUser.id)
-    );
-
-    if (!Array.isArray(admins) || admins.length === 0) {
-      throw new Error("Cuenta sin autorización administrativa.");
-    }
+    await loadCurrentStore();
 
     showAdmin();
     await loadDashboard();
@@ -268,8 +351,12 @@ async function verifyAdmin() {
   } catch (error) {
     accessToken = "";
     currentUser = null;
+    currentStore = null;
+    currentStoreId = "";
+
     showLogin();
     showMessage(error.message);
+
     return false;
   }
 }
@@ -310,6 +397,10 @@ loginForm.addEventListener("submit", async event => {
 
   } catch (error) {
     accessToken = "";
+    currentUser = null;
+    currentStore = null;
+    currentStoreId = "";
+
     showMessage("Error de acceso: " + error.message);
 
   } finally {
@@ -327,6 +418,14 @@ document.getElementById("logoutBtn").onclick = async () => {
 
   accessToken = "";
   currentUser = null;
+  currentStore = null;
+  currentStoreId = "";
+
+  categories = [];
+  products = [];
+  orders = [];
+  orderItems = [];
+
   loginForm.reset();
   showLogin();
   showMessage("Sesión cerrada.");
@@ -450,11 +549,11 @@ adminStyles.textContent = `
 document.head.appendChild(adminStyles);
 
 // ======================================
-// CARGAR DATOS
+// CARGAR DATOS DEL NEGOCIO
 // ======================================
 
 async function loadDashboard() {
-  workspace.innerHTML = "<p>Cargando información...</p>";
+  showWorkspace("<p>Cargando información...</p>");
 
   try {
     await Promise.all([
@@ -465,20 +564,27 @@ async function loadDashboard() {
     renderProducts();
 
   } catch (error) {
-    workspace.innerHTML =
-      `<p>Error al cargar: ${escapeHTML(error.message)}</p>`;
+    showWorkspace(
+      `<p>Error al cargar: ${escapeHTML(error.message)}</p>`
+    );
   }
 }
 
 async function loadCategories() {
   categories = await api(
-    "/rest/v1/lc_commerce_categories?select=id,name,emoji,active&order=name.asc"
+    "/rest/v1/lc_commerce_categories" +
+    "?select=id,name,emoji,active,store_id" +
+    "&" + storeFilter() +
+    "&order=name.asc"
   );
 }
 
 async function loadProducts() {
   products = await api(
-    "/rest/v1/lc_commerce_products?select=id,category_id,name,description,price,image_url,active&order=created_at.desc"
+    "/rest/v1/lc_commerce_products" +
+    "?select=id,category_id,name,description,price,image_url,active,store_id" +
+    "&" + storeFilter() +
+    "&order=created_at.desc"
   );
 }
 
@@ -546,29 +652,24 @@ function renderProducts(editing = null) {
     `;
   }).join("");
 
-  workspace.innerHTML = `
+  showWorkspace(`
     <h3>📦 Administración de productos</h3>
 
     <form id="productForm" class="lc-form-grid">
-      <input
-        type="hidden"
-        id="productId"
+      <input type="hidden" id="productId"
         value="${escapeHTML(p.id || "")}">
 
-      <input
-        id="productName"
+      <input id="productName"
         placeholder="Nombre del producto"
         maxlength="120"
         value="${escapeHTML(p.name || "")}"
         required>
 
-      <textarea
-        id="productDescription"
+      <textarea id="productDescription"
         placeholder="Descripción del producto"
         rows="3">${escapeHTML(p.description || "")}</textarea>
 
-      <input
-        id="productPrice"
+      <input id="productPrice"
         type="number"
         min="0.01"
         max="9999999"
@@ -586,8 +687,7 @@ function renderProducts(editing = null) {
         📸 Fotografía del producto
       </label>
 
-      <input
-        id="productImageFile"
+      <input id="productImageFile"
         class="lc-file-input"
         type="file"
         accept="image/jpeg,image/png,image/webp">
@@ -597,27 +697,21 @@ function renderProducts(editing = null) {
         Se optimizará automáticamente antes de subir.
       </p>
 
-      <img
-        id="productImagePreview"
+      <img id="productImagePreview"
         class="lc-image-preview"
         src="${escapeHTML(p.image_url || "")}"
         alt="Vista previa de la fotografía"
         style="${p.image_url ? "" : "display:none;"}">
 
-      <input
-        id="productImage"
-        type="hidden"
+      <input id="productImage" type="hidden"
         value="${escapeHTML(p.image_url || "")}">
 
       <select id="productActive">
-        <option
-          value="true"
+        <option value="true"
           ${p.active !== false ? "selected" : ""}>
           Activo
         </option>
-
-        <option
-          value="false"
+        <option value="false"
           ${p.active === false ? "selected" : ""}>
           Inactivo
         </option>
@@ -628,8 +722,7 @@ function renderProducts(editing = null) {
       </button>
 
       ${p.id ? `
-        <button
-          type="button"
+        <button type="button"
           class="lc-secondary"
           id="cancelEdit">
           Cancelar edición
@@ -638,20 +731,16 @@ function renderProducts(editing = null) {
     </form>
 
     <p id="productMessage" class="lc-status"></p>
-
     <hr>
-
     <h3>Productos registrados (${products.length})</h3>
-
     ${list || "<p>No hay productos registrados.</p>"}
-  `;
+  `);
 
   const imageInput = document.getElementById("productImageFile");
   const preview = document.getElementById("productImagePreview");
 
   imageInput.addEventListener("change", () => {
     const file = imageInput.files[0];
-
     if (!file) return;
 
     const allowedTypes = [
@@ -677,7 +766,6 @@ function renderProducts(editing = null) {
     }
 
     const objectUrl = URL.createObjectURL(file);
-
     preview.dataset.objectUrl = objectUrl;
     preview.src = objectUrl;
     preview.style.display = "block";
@@ -694,7 +782,6 @@ function renderProducts(editing = null) {
       const product = products.find(
         p => p.id === button.dataset.edit
       );
-
       if (product) renderProducts(product);
     };
   });
@@ -717,7 +804,6 @@ async function saveProduct(event) {
 
   const productId = document.getElementById("productId").value;
   const status = document.getElementById("productMessage");
-
   const imageFile =
     document.getElementById("productImageFile").files[0];
 
@@ -754,10 +840,12 @@ async function saveProduct(event) {
     if (imageFile) {
       status.textContent = "Comprimiendo fotografía...";
 
-      const compressedImage = await compressProductImage(imageFile);
+      const compressedImage =
+        await compressProductImage(imageFile);
 
       const originalKB = Math.round(imageFile.size / 1024);
-      const compressedKB = Math.round(compressedImage.size / 1024);
+      const compressedKB =
+        Math.round(compressedImage.size / 1024);
 
       const savedPercent = imageFile.size > 0
         ? Math.max(
@@ -772,15 +860,17 @@ async function saveProduct(event) {
         `Optimizada: ${originalKB} KB → ${compressedKB} KB. ` +
         `Ahorro: ${savedPercent}%. Subiendo...`;
 
-      product.image_url = await uploadProductImage(compressedImage);
+      product.image_url =
+        await uploadProductImage(compressedImage);
     }
 
     status.textContent = "Guardando producto...";
 
     if (productId) {
       await api(
-        "/rest/v1/lc_commerce_products?id=eq." +
-        encodeURIComponent(productId),
+        "/rest/v1/lc_commerce_products" +
+        "?id=eq." + encodeURIComponent(productId) +
+        "&" + storeFilter(),
         {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
@@ -794,22 +884,21 @@ async function saveProduct(event) {
         {
           method: "POST",
           headers: { Prefer: "return=minimal" },
-          body: JSON.stringify(product)
+          body: JSON.stringify({
+            ...product,
+            store_id: currentStoreId
+          })
         }
       );
     }
 
     await loadProducts();
     renderProducts();
-
     showMessage("Producto guardado correctamente.");
 
   } catch (error) {
     status.textContent = "Error: " + error.message;
-
-    if (button) {
-      button.disabled = false;
-    }
+    button.disabled = false;
   }
 }
 
@@ -823,8 +912,9 @@ async function toggleProduct(id) {
 
   try {
     await api(
-      "/rest/v1/lc_commerce_products?id=eq." +
-      encodeURIComponent(id),
+      "/rest/v1/lc_commerce_products" +
+      "?id=eq." + encodeURIComponent(id) +
+      "&" + storeFilter(),
       {
         method: "PATCH",
         headers: { Prefer: "return=minimal" },
@@ -846,7 +936,6 @@ async function toggleProduct(id) {
 
 async function deleteProduct(id) {
   const product = products.find(p => p.id === id);
-
   if (!product) return;
 
   const confirmed = confirm(
@@ -859,13 +948,12 @@ async function deleteProduct(id) {
 
   try {
     await api(
-      "/rest/v1/lc_commerce_products?id=eq." +
-      encodeURIComponent(id),
+      "/rest/v1/lc_commerce_products" +
+      "?id=eq." + encodeURIComponent(id) +
+      "&" + storeFilter(),
       {
         method: "DELETE",
-        headers: {
-          Prefer: "return=minimal"
-        }
+        headers: { Prefer: "return=minimal" }
       }
     );
 
@@ -901,14 +989,12 @@ function renderCategories(editing = null) {
       </p>
 
       <div class="lc-actions">
-        <button
-          type="button"
+        <button type="button"
           data-category-edit="${category.id}">
           Editar
         </button>
 
-        <button
-          type="button"
+        <button type="button"
           class="lc-secondary"
           data-category-toggle="${category.id}">
           ${category.active ? "Desactivar" : "Activar"}
@@ -917,37 +1003,30 @@ function renderCategories(editing = null) {
     </div>
   `).join("");
 
-  workspace.innerHTML = `
+  showWorkspace(`
     <h3>🏷️ Administración de categorías</h3>
 
     <form id="categoryForm" class="lc-form-grid">
-      <input
-        type="hidden"
-        id="categoryId"
+      <input type="hidden" id="categoryId"
         value="${escapeHTML(c.id || "")}">
 
-      <input
-        id="categoryName"
+      <input id="categoryName"
         placeholder="Nombre de la categoría"
         maxlength="80"
         value="${escapeHTML(c.name || "")}"
         required>
 
-      <input
-        id="categoryEmoji"
+      <input id="categoryEmoji"
         placeholder="Emoji (ejemplo 🍔)"
         maxlength="12"
         value="${escapeHTML(c.emoji || "🏷️")}">
 
       <select id="categoryActive">
-        <option
-          value="true"
+        <option value="true"
           ${c.active !== false ? "selected" : ""}>
           Activa
         </option>
-
-        <option
-          value="false"
+        <option value="false"
           ${c.active === false ? "selected" : ""}>
           Inactiva
         </option>
@@ -958,8 +1037,7 @@ function renderCategories(editing = null) {
       </button>
 
       ${c.id ? `
-        <button
-          type="button"
+        <button type="button"
           class="lc-secondary"
           id="cancelCategoryEdit">
           Cancelar edición
@@ -968,13 +1046,10 @@ function renderCategories(editing = null) {
     </form>
 
     <p id="categoryMessage" class="lc-status"></p>
-
     <hr>
-
     <h3>Categorías registradas (${categories.length})</h3>
-
     ${list || "<p>No hay categorías.</p>"}
-  `;
+  `);
 
   document.getElementById("categoryForm")
     .addEventListener("submit", saveCategory);
@@ -988,7 +1063,6 @@ function renderCategories(editing = null) {
         const category = categories.find(
           item => item.id === button.dataset.categoryEdit
         );
-
         if (category) renderCategories(category);
       };
     });
@@ -1024,8 +1098,9 @@ async function saveCategory(event) {
   try {
     if (id) {
       await api(
-        "/rest/v1/lc_commerce_categories?id=eq." +
-        encodeURIComponent(id),
+        "/rest/v1/lc_commerce_categories" +
+        "?id=eq." + encodeURIComponent(id) +
+        "&" + storeFilter(),
         {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
@@ -1039,7 +1114,10 @@ async function saveCategory(event) {
         {
           method: "POST",
           headers: { Prefer: "return=minimal" },
-          body: JSON.stringify(category)
+          body: JSON.stringify({
+            ...category,
+            store_id: currentStoreId
+          })
         }
       );
     }
@@ -1075,8 +1153,9 @@ async function toggleCategory(id) {
 
   try {
     await api(
-      "/rest/v1/lc_commerce_categories?id=eq." +
-      encodeURIComponent(id),
+      "/rest/v1/lc_commerce_categories" +
+      "?id=eq." + encodeURIComponent(id) +
+      "&" + storeFilter(),
       {
         method: "PATCH",
         headers: { Prefer: "return=minimal" },
@@ -1100,7 +1179,7 @@ async function toggleCategory(id) {
 function renderImageGallery() {
   const gallery = products.filter(product => product.image_url);
 
-  workspace.innerHTML = `
+  showWorkspace(`
     <h3>🖼️ Galería de imágenes</h3>
 
     <p>
@@ -1128,13 +1207,8 @@ function renderImageGallery() {
 
               <div>
                 <strong>${escapeHTML(product.name)}</strong>
-
-                <p>
-                  $${Number(product.price).toFixed(2)} MXN
-                </p>
-
-                <button
-                  type="button"
+                <p>$${Number(product.price).toFixed(2)} MXN</p>
+                <button type="button"
                   data-image-edit="${product.id}">
                   Cambiar fotografía
                 </button>
@@ -1144,7 +1218,7 @@ function renderImageGallery() {
         `).join("")
         : "<p>Todavía no hay fotografías cargadas.</p>"
     }
-  `;
+  `);
 
   document.getElementById("addImageProduct").onclick = () => {
     renderProducts();
@@ -1155,26 +1229,38 @@ function renderImageGallery() {
       const product = products.find(
         item => item.id === button.dataset.imageEdit
       );
-
       if (product) renderProducts(product);
     };
   });
 }
 
 // ======================================
-// PEDIDOS
+// PEDIDOS DEL NEGOCIO
 // ======================================
 
 async function loadOrders() {
   orders = await api(
     "/rest/v1/lc_commerce_orders" +
-    "?select=id,customer_name,customer_phone,delivery_type,address,total,status,payment_status,payment_reference,created_at" +
+    "?select=id,customer_name,customer_phone,delivery_type,address,total,status,payment_status,payment_reference,created_at,store_id" +
+    "&" + storeFilter() +
     "&order=created_at.desc"
+  );
+
+  if (!orders.length) {
+    orderItems = [];
+    return;
+  }
+
+  const ids = orders.map(order => order.id);
+
+  const inFilter = encodeURIComponent(
+    "(" + ids.join(",") + ")"
   );
 
   orderItems = await api(
     "/rest/v1/lc_commerce_order_items" +
-    "?select=id,order_id,product_name,quantity,unit_price,subtotal"
+    "?select=id,order_id,product_name,quantity,unit_price,subtotal" +
+    "&order_id=in." + inFilter
   );
 }
 
@@ -1207,8 +1293,10 @@ function getWhatsAppLink(order) {
   const shortId = String(order.id).slice(0, 8);
 
   const message =
-    `Hola ${order.customer_name}, te contactamos de LC Commerce. ` +
-    `Tu pedido #${shortId} tiene un total de $${Number(order.total).toFixed(2)} MXN. ` +
+    `Hola ${order.customer_name}, te contactamos de ` +
+    `${currentStore?.name || "tu negocio"}. ` +
+    `Tu pedido #${shortId} tiene un total de ` +
+    `$${Number(order.total).toFixed(2)} MXN. ` +
     `Estamos dando seguimiento a tu compra. ¡Gracias!`;
 
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
@@ -1249,8 +1337,9 @@ async function confirmOrderPayment(orderId) {
 
   try {
     await api(
-      "/rest/v1/lc_commerce_orders?id=eq." +
-      encodeURIComponent(orderId),
+      "/rest/v1/lc_commerce_orders" +
+      "?id=eq." + encodeURIComponent(orderId) +
+      "&" + storeFilter(),
       {
         method: "PATCH",
         headers: { Prefer: "return=minimal" },
@@ -1382,11 +1471,8 @@ function renderOrders() {
         }
 
         <hr>
-
         <strong>Productos</strong>
-
         ${itemsHTML || "<p>No hay productos registrados.</p>"}
-
         <hr>
 
         <p>
@@ -1431,7 +1517,7 @@ function renderOrders() {
     `;
   }).join("");
 
-  workspace.innerHTML = `
+  showWorkspace(`
     <h3>🧾 Administración de pedidos</h3>
 
     <button type="button" id="refreshOrders">
@@ -1445,19 +1531,19 @@ function renderOrders() {
     </p>
 
     <hr>
-
     ${list || "<p>No hay pedidos registrados todavía.</p>"}
-  `;
+  `);
 
   document.getElementById("refreshOrders").onclick = async () => {
-    workspace.innerHTML = "<p>Actualizando pedidos...</p>";
+    showWorkspace("<p>Actualizando pedidos...</p>");
 
     try {
       await loadOrders();
       renderOrders();
     } catch (error) {
-      workspace.innerHTML =
-        `<p>Error al cargar pedidos: ${escapeHTML(error.message)}</p>`;
+      showWorkspace(
+        `<p>Error al cargar pedidos: ${escapeHTML(error.message)}</p>`
+      );
     }
   };
 
@@ -1474,8 +1560,9 @@ function renderOrders() {
 
       try {
         await api(
-          "/rest/v1/lc_commerce_orders?id=eq." +
-          encodeURIComponent(orderId),
+          "/rest/v1/lc_commerce_orders" +
+          "?id=eq." + encodeURIComponent(orderId) +
+          "&" + storeFilter(),
           {
             method: "PATCH",
             headers: { Prefer: "return=minimal" },
@@ -1487,8 +1574,7 @@ function renderOrders() {
           "Estado actualizado correctamente.";
 
       } catch (error) {
-        statusMessage.textContent =
-          "Error: " + error.message;
+        statusMessage.textContent = "Error: " + error.message;
       }
     };
   });
@@ -1501,15 +1587,16 @@ function renderOrders() {
 }
 
 async function openOrders() {
-  workspace.innerHTML = "<p>Cargando pedidos...</p>";
+  showWorkspace("<p>Cargando pedidos...</p>");
 
   try {
     await loadOrders();
     renderOrders();
 
   } catch (error) {
-    workspace.innerHTML =
-      `<p>Error al cargar pedidos: ${escapeHTML(error.message)}</p>`;
+    showWorkspace(
+      `<p>Error al cargar pedidos: ${escapeHTML(error.message)}</p>`
+    );
   }
 }
 
@@ -1535,7 +1622,8 @@ document.getElementById("imagesBtn").onclick = () => {
   renderImageGallery();
 };
 
-// No recuperar sesiones anteriores.
+// La sesión se inicia nuevamente al entrar.
+// No se recuperan sesiones anteriores.
 if (!accessToken) {
   showLogin();
 }
