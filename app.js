@@ -1,3 +1,4 @@
+
 "use strict";
 
 // ===================================
@@ -5,12 +6,17 @@
 // Proyecto: prompts
 // ===================================
 
-const SUPABASE_URL = "https://fwacwaptqxhygifqfnsc.supabase.co";
-const SUPABASE_KEY = "sb_publishable_aB8Bk75Nidcd-pCeba5NmQ_cgOPOqnp";
+const SUPABASE_URL =
+  "https://fwacwaptqxhygifqfnsc.supabase.co";
 
-// Configuración del negocio
+const SUPABASE_KEY =
+  "sb_publishable_aB8Bk75Nidcd-pCeba5NmQ_cgOPOqnp";
+
+// Configuración provisional del negocio
 const WHATSAPP_NUMBER = "526144180552";
 const MERCADO_PAGO_URL = "";
+
+const DEFAULT_STORE_SLUG = "lc-commerce-principal";
 
 // ===================================
 // TIENDA ACTUAL
@@ -19,16 +25,10 @@ const MERCADO_PAGO_URL = "";
 let currentStore = null;
 let currentStoreId = null;
 
-// El slug se obtiene de:
-// ?store=cafeteria-demostracion
-//
-// Si no existe ?store=, se utiliza:
-// lc-commerce-principal
-
-const DEFAULT_STORE_SLUG = "lc-commerce-principal";
-
 function getStoreSlug() {
-  const params = new URLSearchParams(window.location.search);
+  const params = new URLSearchParams(
+    window.location.search
+  );
 
   return (
     params.get("store") ||
@@ -105,7 +105,8 @@ async function supabaseRequest(path, options = {}) {
     let message = text;
 
     try {
-      message = JSON.parse(text).message || text;
+      const data = JSON.parse(text);
+      message = data.message || data.details || text;
     } catch (_) {}
 
     throw new Error(
@@ -123,69 +124,70 @@ async function supabaseRequest(path, options = {}) {
 }
 
 // ===================================
-// CARGAR TIENDA
+// IDENTIFICAR TIENDA
 // ===================================
 
 async function loadStore() {
   const slug = getStoreSlug();
 
-  console.log("LC Commerce - slug solicitado:", slug);
+  console.log(
+    "LC Commerce - slug solicitado:",
+    slug
+  );
 
-  try {
-    const stores = await supabaseRequest(
-      `lc_commerce_stores?select=id,name,slug,status&slug=eq.${encodeURIComponent(slug)}&limit=1`
-    );
-
-    if (!stores || !stores.length) {
-      throw new Error(
-        `No se encontró la tienda "${slug}".`
-      );
+  const stores = await supabaseRequest(
+    "rpc/lc_commerce_get_public_store",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        p_slug: slug
+      })
     }
+  );
 
-    const store = stores[0];
-
-    if (store.status !== "active" && store.status !== "setup") {
-      throw new Error(
-        "Esta tienda no está disponible actualmente."
-      );
-    }
-
-    currentStore = store;
-    currentStoreId = store.id;
-
-    console.log(
-      "LC Commerce - tienda:",
-      store.name
+  if (!Array.isArray(stores) || !stores.length) {
+    throw new Error(
+      `No se encontró la tienda "${slug}".`
     );
-
-    console.log(
-      "LC Commerce - store_id:",
-      store.id
-    );
-
-    // Actualizar título del documento
-    document.title =
-      `${store.name} - LC Commerce`;
-
-    // Si existe un elemento con id="storeName",
-    // mostrar el nombre de la tienda.
-    const storeNameElement =
-      document.getElementById("storeName");
-
-    if (storeNameElement) {
-      storeNameElement.textContent = store.name;
-    }
-
-    return store;
-
-  } catch (error) {
-    console.error(
-      "Error cargando tienda:",
-      error
-    );
-
-    throw error;
   }
+
+  const store = stores[0];
+
+  if (
+    !store.id ||
+    !store.name ||
+    !store.slug
+  ) {
+    throw new Error(
+      "La información de la tienda está incompleta."
+    );
+  }
+
+  currentStore = store;
+  currentStoreId = store.id;
+
+  console.log(
+    "Tienda identificada:",
+    store.name
+  );
+
+  console.log(
+    "Store ID:",
+    store.id
+  );
+
+  document.title =
+    `${store.name} - LC Commerce`;
+
+  const storeNameElement =
+    document.getElementById("storeName");
+
+  if (storeNameElement) {
+    storeNameElement.textContent =
+      store.name;
+  }
+
+  return store;
 }
 
 // ===================================
@@ -213,12 +215,11 @@ function validatePhone(value) {
 }
 
 // ===================================
-// CARGAR CATÁLOGO
+// CARGAR CATÁLOGO DE LA TIENDA
 // ===================================
 
 async function loadCatalog() {
   try {
-
     if (!currentStoreId) {
       throw new Error(
         "No se ha identificado la tienda."
@@ -228,23 +229,32 @@ async function loadCatalog() {
     const storeFilter =
       `store_id=eq.${encodeURIComponent(currentStoreId)}`;
 
-    const [categoryData, productData] = await Promise.all([
+    const [categoryData, productData] =
+      await Promise.all([
 
-      supabaseRequest(
-        `lc_commerce_categories?select=id,name,emoji&active=eq.true&${storeFilter}&order=name.asc`
-      ),
+        supabaseRequest(
+          "lc_commerce_categories?select=id,name,emoji&active=eq.true&" +
+          storeFilter +
+          "&order=name.asc"
+        ),
 
-      supabaseRequest(
-        `lc_commerce_products?select=id,category_id,name,description,price,image_url,active&active=eq.true&${storeFilter}&order=created_at.desc`
-      )
+        supabaseRequest(
+          "lc_commerce_products?select=id,category_id,name,description,price,image_url,active&active=eq.true&" +
+          storeFilter +
+          "&order=created_at.desc"
+        )
 
-    ]);
+      ]);
 
     categories = categoryData || [];
     products = productData || [];
 
+    // Eliminar del carrito productos que no
+    // pertenecen al catálogo de esta tienda.
     cart = cart.filter(item =>
-      products.some(product => product.id === item.id)
+      products.some(product =>
+        product.id === item.id
+      )
     );
 
     save();
@@ -255,20 +265,19 @@ async function loadCatalog() {
     toast("Catálogo actualizado");
 
   } catch (error) {
-
     console.error(
       "Error cargando catálogo:",
       error
     );
 
-    const productsElement =
+    const container =
       document.getElementById("products");
 
-    if (productsElement) {
-      productsElement.innerHTML =
+    if (container) {
+      container.innerHTML =
         `<div class="empty">
           No se pudo cargar el catálogo.
-          Comprueba la conexión con Supabase.
+          ${escapeHTML(error.message)}
         </div>`;
     }
 
@@ -276,6 +285,8 @@ async function loadCatalog() {
       error.message ||
       "Error al conectar con Supabase"
     );
+
+    throw error;
   }
 }
 
@@ -291,7 +302,9 @@ function renderCats() {
 
   const names = [
     "Todos",
-    ...categories.map(category => category.name)
+    ...categories.map(category =>
+      category.name
+    )
   ];
 
   container.innerHTML = names.map(name => `
@@ -306,19 +319,15 @@ function renderCats() {
     .querySelectorAll("[data-category]")
     .forEach(button => {
 
-      button.addEventListener(
-        "click",
-        () => {
-          setCat(button.dataset.category);
-        }
-      );
+      button.addEventListener("click", () => {
+        setCat(button.dataset.category);
+      });
 
     });
 }
 
 function setCat(category) {
   currentCat = category;
-
   renderCats();
   renderProducts();
 }
@@ -339,9 +348,8 @@ function renderProducts() {
       : products.filter(product => {
 
           const category =
-            categories.find(
-              item =>
-                item.id === product.category_id
+            categories.find(item =>
+              item.id === product.category_id
             );
 
           return (
@@ -351,146 +359,127 @@ function renderProducts() {
         });
 
   if (!list.length) {
-
     container.innerHTML =
       `<div class="empty">
         No hay productos disponibles.
       </div>`;
-
     return;
   }
 
-  container.innerHTML =
-    list.map(product => {
+  container.innerHTML = list.map(product => {
 
-      const category =
-        categories.find(
-          item =>
-            item.id === product.category_id
-        );
+    const category =
+      categories.find(item =>
+        item.id === product.category_id
+      );
 
-      const emoji =
-        category?.emoji || "🛍️";
+    const emoji =
+      category?.emoji || "🛍️";
 
-      // ==========================================
-      // IMAGEN INDIVIDUAL DEL PRODUCTO
-      // ==========================================
+    let imageUrl =
+      String(product.image_url || "").trim();
 
-      let imageUrl =
-        String(
-          product.image_url || ""
-        ).trim();
+    if (imageUrl) {
+      const separator =
+        imageUrl.includes("?") ? "&" : "?";
 
-      if (imageUrl) {
+      imageUrl =
+        `${imageUrl}${separator}lc_product=${encodeURIComponent(
+          String(product.id)
+        )}&v=${Date.now()}`;
+    }
 
-        const separator =
-          imageUrl.includes("?")
-            ? "&"
-            : "?";
-
-        imageUrl =
-          `${imageUrl}${separator}lc_product=${encodeURIComponent(
-            String(product.id)
-          )}&v=${Date.now()}`;
-      }
-
-      const photo =
-        imageUrl
-          ? `
-            <img
-              src="${escapeHTML(imageUrl)}"
-              alt="${escapeHTML(product.name)}"
-              loading="lazy"
-              decoding="async"
-              data-product-image="${escapeHTML(product.id)}"
-              style="
-                display:block;
-                width:100%;
-                height:100%;
-                object-fit:cover;
-              "
-              onerror="
-                this.style.display='none';
-                this.nextElementSibling.style.display='flex';
-              "
-            >
-
-            <div
-              style="
-                display:none;
-                width:100%;
-                height:100%;
-                align-items:center;
-                justify-content:center;
-                font-size:48px;
-              "
-            >
-              ${escapeHTML(emoji)}
-            </div>
-          `
-          : `
-            <div
-              style="
-                display:flex;
-                width:100%;
-                height:100%;
-                align-items:center;
-                justify-content:center;
-                font-size:48px;
-              "
-            >
-              ${escapeHTML(emoji)}
-            </div>
-          `;
-
-      return `
-        <article
-          class="card"
-          data-product-id="${escapeHTML(product.id)}"
+    const photo = imageUrl
+      ? `
+        <img
+          src="${escapeHTML(imageUrl)}"
+          alt="${escapeHTML(product.name)}"
+          loading="lazy"
+          decoding="async"
+          data-product-image="${escapeHTML(product.id)}"
+          style="
+            display:block;
+            width:100%;
+            height:100%;
+            object-fit:cover;
+          "
+          onerror="
+            this.style.display='none';
+            this.nextElementSibling.style.display='flex';
+          "
         >
 
-          <div class="photo">
-            ${photo}
-          </div>
-
-          <div class="info">
-
-            <div class="name">
-              ${escapeHTML(product.name)}
-            </div>
-
-            <div class="desc">
-              ${escapeHTML(
-                product.description || ""
-              )}
-            </div>
-
-            <div class="price">
-              ${money(product.price)}
-            </div>
-
-            <button
-              class="add"
-              data-add="${escapeHTML(product.id)}">
-              + Agregar
-            </button>
-
-          </div>
-
-        </article>
+        <div
+          style="
+            display:none;
+            width:100%;
+            height:100%;
+            align-items:center;
+            justify-content:center;
+            font-size:48px;
+          "
+        >
+          ${escapeHTML(emoji)}
+        </div>
+      `
+      : `
+        <div
+          style="
+            display:flex;
+            width:100%;
+            height:100%;
+            align-items:center;
+            justify-content:center;
+            font-size:48px;
+          "
+        >
+          ${escapeHTML(emoji)}
+        </div>
       `;
-    }).join("");
+
+    return `
+      <article
+        class="card"
+        data-product-id="${escapeHTML(product.id)}"
+      >
+
+        <div class="photo">
+          ${photo}
+        </div>
+
+        <div class="info">
+
+          <div class="name">
+            ${escapeHTML(product.name)}
+          </div>
+
+          <div class="desc">
+            ${escapeHTML(product.description || "")}
+          </div>
+
+          <div class="price">
+            ${money(product.price)}
+          </div>
+
+          <button
+            class="add"
+            data-add="${escapeHTML(product.id)}">
+            + Agregar
+          </button>
+
+        </div>
+
+      </article>
+    `;
+  }).join("");
 
   container
     .querySelectorAll("[data-add]")
     .forEach(button => {
 
-      button.addEventListener(
-        "click",
-        () => {
-          add(button.dataset.add);
-        }
-      );
+      button.addEventListener("click", () => {
+        add(button.dataset.add);
+      });
 
     });
 }
@@ -500,56 +489,40 @@ function renderProducts() {
 // ===================================
 
 function add(id) {
-
   const product =
-    products.find(
-      item => item.id === id
-    );
+    products.find(item => item.id === id);
 
   if (!product) return;
 
   const item =
-    cart.find(
-      item => item.id === id
-    );
+    cart.find(item => item.id === id);
 
   if (item) {
-
     item.qty++;
-
   } else {
-
     cart.push({
       id,
       qty: 1
     });
-
   }
 
   save();
   renderCart();
-
   toast("Producto agregado");
 }
 
 function change(id, difference) {
-
   const item =
-    cart.find(
-      product => product.id === id
-    );
+    cart.find(product => product.id === id);
 
   if (!item) return;
 
   item.qty += difference;
 
   if (item.qty <= 0) {
-
-    cart =
-      cart.filter(
-        product => product.id !== id
-      );
-
+    cart = cart.filter(product =>
+      product.id !== id
+    );
   }
 
   save();
@@ -557,7 +530,6 @@ function change(id, difference) {
 }
 
 function save() {
-
   localStorage.setItem(
     "lcCommerceCart",
     JSON.stringify(cart)
@@ -567,45 +539,32 @@ function save() {
 }
 
 function updateCount() {
-
   const element =
-    document.getElementById(
-      "cartCount"
-    );
+    document.getElementById("cartCount");
 
   if (element) {
-
-    element.textContent =
-      cart.reduce(
-        (sum, item) =>
-          sum + item.qty,
-        0
-      );
-
+    element.textContent = cart.reduce(
+      (sum, item) => sum + item.qty,
+      0
+    );
   }
 }
 
 function getTotal() {
+  return cart.reduce((sum, item) => {
 
-  return cart.reduce(
-    (sum, item) => {
-
-      const product =
-        products.find(
-          product =>
-            product.id === item.id
-        );
-
-      return sum + (
-        product
-          ? Number(product.price) *
-            item.qty
-          : 0
+    const product =
+      products.find(product =>
+        product.id === item.id
       );
 
-    },
-    0
-  );
+    return sum + (
+      product
+        ? Number(product.price) * item.qty
+        : 0
+    );
+
+  }, 0);
 }
 
 // ===================================
@@ -613,115 +572,85 @@ function getTotal() {
 // ===================================
 
 function renderCart() {
-
   const box =
-    document.getElementById(
-      "cartItems"
-    );
+    document.getElementById("cartItems");
 
   if (!box) return;
 
   if (!cart.length) {
-
     box.innerHTML =
       `<div class="empty">
         Tu carrito está vacío.
       </div>`;
 
     const total =
-      document.getElementById(
-        "total"
-      );
+      document.getElementById("total");
 
     if (total) {
-      total.textContent =
-        money(0);
+      total.textContent = money(0);
     }
 
     return;
   }
 
-  box.innerHTML =
-    cart.map(item => {
+  box.innerHTML = cart.map(item => {
 
-      const product =
-        products.find(
-          product =>
-            product.id === item.id
-        );
+    const product =
+      products.find(product =>
+        product.id === item.id
+      );
 
-      if (!product) return "";
+    if (!product) return "";
 
-      const category =
-        categories.find(
-          category =>
-            category.id ===
-            product.category_id
-        );
+    const category =
+      categories.find(category =>
+        category.id === product.category_id
+      );
 
-      return `
-        <div class="item">
+    return `
+      <div class="item">
 
-          <div class="emoji">
-            ${escapeHTML(
-              category?.emoji ||
-              "🛍️"
-            )}
-          </div>
+        <div class="emoji">
+          ${escapeHTML(category?.emoji || "🛍️")}
+        </div>
 
-          <div class="itemMain">
+        <div class="itemMain">
 
-            <b>
-              ${escapeHTML(
-                product.name
-              )}
-            </b>
+          <b>
+            ${escapeHTML(product.name)}
+          </b>
 
-            <div>
-              ${money(
-                Number(product.price) *
-                item.qty
-              )}
-            </div>
-
-          </div>
-
-          <div class="qty">
-
-            <button
-              data-minus="${product.id}">
-              −
-            </button>
-
-            <b>
-              ${item.qty}
-            </b>
-
-            <button
-              data-plus="${product.id}">
-              +
-            </button>
-
+          <div>
+            ${money(Number(product.price) * item.qty)}
           </div>
 
         </div>
-      `;
 
-    }).join("");
+        <div class="qty">
+
+          <button data-minus="${product.id}">
+            −
+          </button>
+
+          <b>${item.qty}</b>
+
+          <button data-plus="${product.id}">
+            +
+          </button>
+
+        </div>
+
+      </div>
+    `;
+  }).join("");
 
   box
     .querySelectorAll("[data-minus]")
     .forEach(button => {
 
-      button.addEventListener(
-        "click",
-        () => {
-          change(
-            button.dataset.minus,
-            -1
-          );
-        }
-      );
+      button.addEventListener("click", () => {
+        change(button.dataset.minus, -1);
+      });
 
     });
 
@@ -729,28 +658,17 @@ function renderCart() {
     .querySelectorAll("[data-plus]")
     .forEach(button => {
 
-      button.addEventListener(
-        "click",
-        () => {
-          change(
-            button.dataset.plus,
-            1
-          );
-        }
-      );
+      button.addEventListener("click", () => {
+        change(button.dataset.plus, 1);
+      });
 
     });
 
   const total =
-    document.getElementById(
-      "total"
-    );
+    document.getElementById("total");
 
   if (total) {
-
-    total.textContent =
-      money(getTotal());
-
+    total.textContent = money(getTotal());
   }
 }
 
@@ -759,23 +677,15 @@ function renderCart() {
 // ===================================
 
 function openCart() {
-
-  document.getElementById(
-    "cartPanel"
-  )?.classList.remove(
-    "hidden"
-  );
+  document.getElementById("cartPanel")
+    ?.classList.remove("hidden");
 
   renderCart();
 }
 
 function closeCart() {
-
-  document.getElementById(
-    "cartPanel"
-  )?.classList.add(
-    "hidden"
-  );
+  document.getElementById("cartPanel")
+    ?.classList.add("hidden");
 }
 
 // ===================================
@@ -783,114 +693,77 @@ function closeCart() {
 // ===================================
 
 async function createOrder() {
-
   if (!cart.length) {
-    throw new Error(
-      "Tu carrito está vacío"
-    );
+    throw new Error("Tu carrito está vacío");
   }
 
   if (!currentStoreId) {
-    throw new Error(
-      "No se ha identificado la tienda."
-    );
+    throw new Error("No se ha identificado la tienda");
   }
 
   const name =
-    document.getElementById(
-      "customerName"
-    )?.value.trim() || "";
+    document.getElementById("customerName")
+      ?.value.trim() || "";
 
   const rawPhone =
-    document.getElementById(
-      "customerPhone"
-    )?.value.trim() || "";
+    document.getElementById("customerPhone")
+      ?.value.trim() || "";
 
   const delivery =
-    document.getElementById(
-      "delivery"
-    )?.value || "recoger";
+    document.getElementById("delivery")
+      ?.value || "recoger";
 
   const address =
-    document.getElementById(
-      "address"
-    )?.value.trim() || "";
+    document.getElementById("address")
+      ?.value.trim() || "";
 
   if (name.length < 2) {
-    throw new Error(
-      "Escribe tu nombre"
-    );
+    throw new Error("Escribe tu nombre");
   }
 
-  const phone =
-    validatePhone(rawPhone);
+  const phone = validatePhone(rawPhone);
 
-  if (
-    ![
-      "recoger",
-      "domicilio"
-    ].includes(delivery)
-  ) {
-    throw new Error(
-      "Tipo de entrega no válido"
-    );
+  if (!["recoger", "domicilio"].includes(delivery)) {
+    throw new Error("Tipo de entrega no válido");
   }
 
-  if (
-    delivery === "domicilio" &&
-    address.length < 5
-  ) {
-    throw new Error(
-      "Escribe la dirección de entrega"
-    );
+  if (delivery === "domicilio" && address.length < 5) {
+    throw new Error("Escribe la dirección de entrega");
   }
 
-  const items =
-    cart.map(item => ({
-      product_id: item.id,
-      quantity: item.qty
-    }));
+  const items = cart.map(item => ({
+    product_id: item.id,
+    quantity: item.qty
+  }));
 
   /*
-   * IMPORTANTE:
-   * El RPC actual se conserva exactamente
-   * como estaba para no romper la función
-   * existente de pedidos.
+   * Se conserva la llamada original al RPC.
+   * Todavía falta adaptar la función SQL para
+   * recibir y validar p_store_id.
    *
-   * La separación de pedidos por tienda
-   * se hará en el siguiente paso, cuando
-   * actualicemos el RPC para recibir
-   * p_store_id.
+   * No enviar pedidos de la Demo hasta completar
+   * esa adaptación y verificar el aislamiento.
    */
 
-  const result =
-    await supabaseRequest(
-      "rpc/lc_commerce_create_order",
-      {
-        method: "POST",
-
-        body: JSON.stringify({
-          p_customer_name: name,
-
-          p_customer_phone:
-            phone,
-
-          p_delivery_type:
-            delivery,
-
-          p_address:
-            delivery === "domicilio"
-              ? address
-              : null,
-
-          p_items: items
-        })
-      }
-    );
+  const result = await supabaseRequest(
+    "rpc/lc_commerce_create_order",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        p_customer_name: name,
+        p_customer_phone: phone,
+        p_delivery_type: delivery,
+        p_address:
+          delivery === "domicilio"
+            ? address
+            : null,
+        p_items: items
+      })
+    }
+  );
 
   const orderId =
-    String(result)
-      .replace(/^"|"$/g, "");
+    String(result).replace(/^"|"$/g, "");
 
   if (
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -916,84 +789,57 @@ async function createOrder() {
 // ===================================
 
 async function sendWhatsApp() {
-
   if (submitting) return;
 
   if (
-    !/^\d{10,15}$/.test(
-      WHATSAPP_NUMBER
-    ) ||
-    WHATSAPP_NUMBER ===
-      "5210000000000"
+    !/^\d{10,15}$/.test(WHATSAPP_NUMBER) ||
+    WHATSAPP_NUMBER === "5210000000000"
   ) {
-    return toast(
-      "Configura el WhatsApp del negocio"
-    );
+    return toast("Configura el WhatsApp del negocio");
   }
 
   submitting = true;
 
   try {
+    toast("Registrando pedido...");
 
-    toast(
-      "Registrando pedido..."
-    );
-
-    const order =
-      await createOrder();
+    const order = await createOrder();
 
     const lines = [
       "*NUEVO PEDIDO LC COMMERCE*",
       "",
-      `Tienda: ${
-        currentStore?.name ||
-        "LC Commerce"
-      }`,
+      `Tienda: ${currentStore?.name || "LC Commerce"}`,
       `Pedido: ${order.id}`,
       `Cliente: ${order.name}`,
       `Teléfono del cliente: ${order.phone}`
     ];
 
     cart.forEach(item => {
-
       const product =
-        products.find(
-          product =>
-            product.id ===
-            item.id
+        products.find(product =>
+          product.id === item.id
         );
 
       if (!product) return;
 
       lines.push(
         `${product.name} x${item.qty} — ${money(
-          Number(product.price) *
-          item.qty
+          Number(product.price) * item.qty
         )}`
       );
-
     });
 
     lines.push(
       "",
-      `TOTAL: ${money(
-        order.total
-      )}`,
+      `TOTAL: ${money(order.total)}`,
       "",
-      order.delivery ===
-        "domicilio"
+      order.delivery === "domicilio"
         ? "Envío a domicilio"
         : "Recoger en local"
     );
 
     if (order.address) {
-
-      lines.push(
-        `Dirección: ${
-          order.address
-        }`
-      );
-
+      lines.push(`Dirección: ${order.address}`);
     }
 
     lines.push(
@@ -1005,20 +851,15 @@ async function sendWhatsApp() {
       "https://wa.me/" +
       WHATSAPP_NUMBER +
       "?text=" +
-      encodeURIComponent(
-        lines.join("\n")
-      );
+      encodeURIComponent(lines.join("\n"));
 
     cart = [];
-
     save();
     renderCart();
 
-    window.location.href =
-      url;
+    window.location.href = url;
 
   } catch (error) {
-
     console.error(error);
 
     toast(
@@ -1027,9 +868,7 @@ async function sendWhatsApp() {
     );
 
   } finally {
-
     submitting = false;
-
   }
 }
 
@@ -1038,36 +877,24 @@ async function sendWhatsApp() {
 // ===================================
 
 async function payOrder() {
-
   if (submitting) return;
 
   if (!MERCADO_PAGO_URL) {
-
     return toast(
       "Falta configurar el enlace de Mercado Pago"
     );
-
   }
 
   submitting = true;
 
   try {
+    toast("Registrando pedido...");
 
-    toast(
-      "Registrando pedido..."
-    );
+    const order = await createOrder();
 
-    const order =
-      await createOrder();
+    toast("Pedido registrado. Abriendo pago...");
 
-    toast(
-      "Pedido registrado. Abriendo pago..."
-    );
-
-    window.open(
-      MERCADO_PAGO_URL,
-      "_blank"
-    );
+    window.open(MERCADO_PAGO_URL, "_blank");
 
     console.log(
       "Pedido registrado:",
@@ -1075,7 +902,6 @@ async function payOrder() {
     );
 
   } catch (error) {
-
     console.error(error);
 
     toast(
@@ -1084,9 +910,7 @@ async function payOrder() {
     );
 
   } finally {
-
     submitting = false;
-
   }
 }
 
@@ -1095,30 +919,19 @@ async function payOrder() {
 // ===================================
 
 function toast(message) {
-
   const element =
-    document.getElementById(
-      "toast"
-    );
+    document.getElementById("toast");
 
   if (!element) {
-
     alert(message);
-
     return;
   }
 
-  element.textContent =
-    message;
-
-  element.style.display =
-    "block";
+  element.textContent = message;
+  element.style.display = "block";
 
   setTimeout(() => {
-
-    element.style.display =
-      "none";
-
+    element.style.display = "none";
   }, 3000);
 }
 
@@ -1126,75 +939,49 @@ function toast(message) {
 // INICIAR APLICACIÓN
 // ===================================
 
-document.getElementById(
-  "cartBtn"
-)?.addEventListener(
-  "click",
-  openCart
-);
+document.getElementById("cartBtn")
+  ?.addEventListener("click", openCart);
 
-document.getElementById(
-  "closeCart"
-)?.addEventListener(
-  "click",
-  closeCart
-);
+document.getElementById("closeCart")
+  ?.addEventListener("click", closeCart);
 
-document.getElementById(
-  "whatsappBtn"
-)?.addEventListener(
-  "click",
-  sendWhatsApp
-);
+document.getElementById("whatsappBtn")
+  ?.addEventListener("click", sendWhatsApp);
 
-document.getElementById(
-  "payBtn"
-)?.addEventListener(
-  "click",
-  payOrder
-);
+document.getElementById("payBtn")
+  ?.addEventListener("click", payOrder);
+
+updateCount();
 
 // ===================================
 // ARRANQUE
 // ===================================
 
-updateCount();
-
 (async function init() {
-
   try {
-
     await loadStore();
-
     await loadCatalog();
 
   } catch (error) {
-
     console.error(
       "Error iniciando LC Commerce:",
       error
     );
 
     const productsElement =
-      document.getElementById(
-        "products"
-      );
+      document.getElementById("products");
 
     if (productsElement) {
-
       productsElement.innerHTML =
         `<div class="empty">
           No se pudo identificar esta tienda.
-          Comprueba la dirección.
+          ${escapeHTML(error.message)}
         </div>`;
-
     }
 
     toast(
       error.message ||
       "No se pudo iniciar LC Commerce"
     );
-
   }
-
 })();
