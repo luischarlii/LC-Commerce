@@ -303,7 +303,33 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./master.js?v=20261116-2"></script>
+
+<script>
+window.addEventListener("error", function(event) {
+  const box = document.getElementById("message");
+  box.textContent = "ERROR JAVASCRIPT: " + event.message;
+  box.className = "error";
+  box.style.display = "block";
+});
+
+window.addEventListener("unhandledrejection", function(event) {
+  const box = document.getElementById("message");
+  box.textContent = "ERROR DE PROCESO: " +
+    (event.reason?.message || String(event.reason));
+  box.className = "error";
+  box.style.display = "block";
+});
+</script>
+
+<script
+  src="./master.js?v=20261116-3"
+  onerror="
+    const box = document.getElementById('message');
+    box.textContent = 'No se pudo cargar master.js';
+    box.className = 'error';
+    box.style.display = 'block';
+  ">
+</script>
 
 </body>
 </html>
