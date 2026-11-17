@@ -1,4 +1,3 @@
-
 "use strict";
 
 // ===================================
@@ -133,6 +132,7 @@ async function loadCatalog() {
       supabaseRequest(
         "lc_commerce_categories?select=id,name,emoji&active=eq.true&order=name.asc"
       ),
+
       supabaseRequest(
         "lc_commerce_products?select=id,category_id,name,description,price,image_url,active&active=eq.true&order=created_at.desc"
       )
@@ -201,7 +201,7 @@ function setCat(category) {
 }
 
 // ===================================
-// MOSTRAR PRODUCTOS CON FOTOGRAFÍAS
+// MOSTRAR PRODUCTOS
 // ===================================
 
 function renderProducts() {
@@ -226,12 +226,35 @@ function renderProducts() {
   }
 
   container.innerHTML = list.map(product => {
+
     const category = categories.find(
       item => item.id === product.category_id
     );
 
     const emoji = category?.emoji || "🛍️";
-    const imageUrl = String(product.image_url || "").trim();
+
+    // ==========================================
+    // IMAGEN INDIVIDUAL DEL PRODUCTO
+    // ==========================================
+
+    let imageUrl = String(
+      product.image_url || ""
+    ).trim();
+
+    /*
+     * Evita reutilizar una imagen almacenada en caché
+     * cuando la misma ruta fue reemplazada.
+     */
+    if (imageUrl) {
+      const separator = imageUrl.includes("?")
+        ? "&"
+        : "?";
+
+      imageUrl =
+        `${imageUrl}${separator}lc_product=${encodeURIComponent(
+          String(product.id)
+        )}&v=${Date.now()}`;
+    }
 
     const photo = imageUrl
       ? `
@@ -239,27 +262,60 @@ function renderProducts() {
           src="${escapeHTML(imageUrl)}"
           alt="${escapeHTML(product.name)}"
           loading="lazy"
-          style="display:block;width:100%;height:100%;object-fit:cover;"
-          onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+          decoding="async"
+          data-product-image="${escapeHTML(product.id)}"
+          style="
+            display:block;
+            width:100%;
+            height:100%;
+            object-fit:cover;
+          "
+          onerror="
+            this.style.display='none';
+            this.nextElementSibling.style.display='flex';
+          "
+        >
 
         <div
-          style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:48px;">
+          style="
+            display:none;
+            width:100%;
+            height:100%;
+            align-items:center;
+            justify-content:center;
+            font-size:48px;
+          "
+        >
           ${escapeHTML(emoji)}
         </div>
       `
       : `
-        <div style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:48px;">
+        <div
+          style="
+            display:flex;
+            width:100%;
+            height:100%;
+            align-items:center;
+            justify-content:center;
+            font-size:48px;
+          "
+        >
           ${escapeHTML(emoji)}
         </div>
       `;
 
     return `
-      <article class="card">
+      <article
+        class="card"
+        data-product-id="${escapeHTML(product.id)}"
+      >
+
         <div class="photo">
           ${photo}
         </div>
 
         <div class="info">
+
           <div class="name">
             ${escapeHTML(product.name)}
           </div>
@@ -277,7 +333,9 @@ function renderProducts() {
             data-add="${escapeHTML(product.id)}">
             + Agregar
           </button>
+
         </div>
+
       </article>
     `;
   }).join("");
@@ -394,22 +452,39 @@ function renderCart() {
 
     return `
       <div class="item">
+
         <div class="emoji">
           ${escapeHTML(category?.emoji || "🛍️")}
         </div>
 
         <div class="itemMain">
-          <b>${escapeHTML(product.name)}</b>
+
+          <b>
+            ${escapeHTML(product.name)}
+          </b>
+
           <div>
             ${money(Number(product.price) * item.qty)}
           </div>
+
         </div>
 
         <div class="qty">
-          <button data-minus="${product.id}">−</button>
-          <b>${item.qty}</b>
-          <button data-plus="${product.id}">+</button>
+
+          <button data-minus="${product.id}">
+            −
+          </button>
+
+          <b>
+            ${item.qty}
+          </b>
+
+          <button data-plus="${product.id}">
+            +
+          </button>
+
         </div>
+
       </div>
     `;
   }).join("");
@@ -447,7 +522,7 @@ function closeCart() {
 }
 
 // ===================================
-// CREAR PEDIDO EN SUPABASE
+// CREAR PEDIDO
 // ===================================
 
 async function createOrder() {
@@ -498,15 +573,22 @@ async function createOrder() {
         p_customer_name: name,
         p_customer_phone: phone,
         p_delivery_type: delivery,
-        p_address: delivery === "domicilio" ? address : null,
+        p_address:
+          delivery === "domicilio"
+            ? address
+            : null,
         p_items: items
       })
     }
   );
 
-  const orderId = String(result).replace(/^"|"$/g, "");
+  const orderId =
+    String(result).replace(/^"|"$/g, "");
 
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId)) {
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      .test(orderId)
+  ) {
     throw new Error(
       "No se recibió un identificador válido del pedido"
     );
@@ -529,8 +611,10 @@ async function createOrder() {
 async function sendWhatsApp() {
   if (submitting) return;
 
-  if (!/^\d{10,15}$/.test(WHATSAPP_NUMBER) ||
-      WHATSAPP_NUMBER === "5210000000000") {
+  if (
+    !/^\d{10,15}$/.test(WHATSAPP_NUMBER) ||
+    WHATSAPP_NUMBER === "5210000000000"
+  ) {
     return toast("Configura el WhatsApp del negocio");
   }
 
@@ -557,7 +641,9 @@ async function sendWhatsApp() {
       if (!product) return;
 
       lines.push(
-        `${product.name} x${item.qty} — ${money(Number(product.price) * item.qty)}`
+        `${product.name} x${item.qty} — ${money(
+          Number(product.price) * item.qty
+        )}`
       );
     });
 
@@ -571,7 +657,9 @@ async function sendWhatsApp() {
     );
 
     if (order.address) {
-      lines.push(`Dirección: ${order.address}`);
+      lines.push(
+        `Dirección: ${order.address}`
+      );
     }
 
     lines.push(
@@ -583,7 +671,9 @@ async function sendWhatsApp() {
       "https://wa.me/" +
       WHATSAPP_NUMBER +
       "?text=" +
-      encodeURIComponent(lines.join("\n"));
+      encodeURIComponent(
+        lines.join("\n")
+      );
 
     cart = [];
     save();
@@ -593,7 +683,11 @@ async function sendWhatsApp() {
 
   } catch (error) {
     console.error(error);
-    toast(error.message || "No se pudo registrar el pedido");
+
+    toast(
+      error.message ||
+      "No se pudo registrar el pedido"
+    );
 
   } finally {
     submitting = false;
@@ -608,7 +702,9 @@ async function payOrder() {
   if (submitting) return;
 
   if (!MERCADO_PAGO_URL) {
-    return toast("Falta configurar el enlace de Mercado Pago");
+    return toast(
+      "Falta configurar el enlace de Mercado Pago"
+    );
   }
 
   submitting = true;
@@ -618,15 +714,27 @@ async function payOrder() {
 
     const order = await createOrder();
 
-    toast("Pedido registrado. Abriendo pago...");
+    toast(
+      "Pedido registrado. Abriendo pago..."
+    );
 
-    window.open(MERCADO_PAGO_URL, "_blank");
+    window.open(
+      MERCADO_PAGO_URL,
+      "_blank"
+    );
 
-    console.log("Pedido registrado:", order.id);
+    console.log(
+      "Pedido registrado:",
+      order.id
+    );
 
   } catch (error) {
     console.error(error);
-    toast(error.message || "No se pudo registrar el pedido");
+
+    toast(
+      error.message ||
+      "No se pudo registrar el pedido"
+    );
 
   } finally {
     submitting = false;
@@ -638,7 +746,8 @@ async function payOrder() {
 // ===================================
 
 function toast(message) {
-  const element = document.getElementById("toast");
+  const element =
+    document.getElementById("toast");
 
   if (!element) {
     alert(message);
@@ -658,16 +767,28 @@ function toast(message) {
 // ===================================
 
 document.getElementById("cartBtn")
-  ?.addEventListener("click", openCart);
+  ?.addEventListener(
+    "click",
+    openCart
+  );
 
 document.getElementById("closeCart")
-  ?.addEventListener("click", closeCart);
+  ?.addEventListener(
+    "click",
+    closeCart
+  );
 
 document.getElementById("whatsappBtn")
-  ?.addEventListener("click", sendWhatsApp);
+  ?.addEventListener(
+    "click",
+    sendWhatsApp
+  );
 
 document.getElementById("payBtn")
-  ?.addEventListener("click", payOrder);
+  ?.addEventListener(
+    "click",
+    payOrder
+  );
 
 updateCount();
 loadCatalog();
