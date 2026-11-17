@@ -37,24 +37,75 @@ function getStoreSlug() {
 }
 
 // ===================================
+// CARRITO INDEPENDIENTE POR TIENDA
+// ===================================
+
+let cart = [];
+
+function getCartStorageKey() {
+  const slug = currentStore?.slug || getStoreSlug();
+
+  return `lcCommerceCart:${slug}`;
+}
+
+function loadStoreCart() {
+  const key = getCartStorageKey();
+
+  let savedCart = null;
+
+  try {
+    const stored = localStorage.getItem(key);
+
+    if (stored !== null) {
+      savedCart = JSON.parse(stored);
+    } else if (
+      getStoreSlug() === DEFAULT_STORE_SLUG
+    ) {
+      // Migrar el carrito antiguo de LC Commerce
+      // Principal sin perder sus productos.
+      const legacyCart = localStorage.getItem(
+        "lcCommerceCart"
+      );
+
+      if (legacyCart !== null) {
+        savedCart = JSON.parse(legacyCart);
+
+        localStorage.setItem(
+          key,
+          JSON.stringify(savedCart)
+        );
+      }
+    }
+  } catch (error) {
+    console.error(
+      "Error leyendo carrito:",
+      error
+    );
+
+    savedCart = [];
+  }
+
+  if (!Array.isArray(savedCart)) {
+    savedCart = [];
+  }
+
+  cart = savedCart.filter(item =>
+    item &&
+    typeof item.id === "string" &&
+    Number.isInteger(item.qty) &&
+    item.qty > 0 &&
+    item.qty <= 99
+  );
+
+  save();
+}
+
+// ===================================
 // VARIABLES
 // ===================================
 
 let products = [];
 let categories = [];
-
-let cart = JSON.parse(
-  localStorage.getItem("lcCommerceCart") || "[]"
-);
-
-if (!Array.isArray(cart)) cart = [];
-
-cart = cart.filter(item =>
-  item &&
-  typeof item.id === "string" &&
-  Number.isInteger(item.qty) &&
-  item.qty > 0
-);
 
 let currentCat = "Todos";
 let submitting = false;
@@ -165,6 +216,10 @@ async function loadStore() {
 
   currentStore = store;
   currentStoreId = store.id;
+
+  // Cargar el carrito correspondiente
+  // exclusivamente a esta tienda.
+  loadStoreCart();
 
   console.log(
     "Tienda identificada:",
@@ -498,6 +553,10 @@ function add(id) {
     cart.find(item => item.id === id);
 
   if (item) {
+    if (item.qty >= 99) {
+      return toast("Máximo 99 unidades por producto");
+    }
+
     item.qty++;
   } else {
     cart.push({
@@ -525,15 +584,23 @@ function change(id, difference) {
     );
   }
 
+  if (item.qty > 99) {
+    item.qty = 99;
+    toast("Máximo 99 unidades");
+  }
+
   save();
   renderCart();
 }
 
 function save() {
-  localStorage.setItem(
-    "lcCommerceCart",
-    JSON.stringify(cart)
-  );
+  // No guardar hasta identificar la tienda.
+  if (currentStore?.slug) {
+    localStorage.setItem(
+      getCartStorageKey(),
+      JSON.stringify(cart)
+    );
+  }
 
   updateCount();
 }
@@ -628,13 +695,13 @@ function renderCart() {
 
         <div class="qty">
 
-          <button data-minus="${product.id}">
+          <button data-minus="${escapeHTML(product.id)}">
             −
           </button>
 
           <b>${item.qty}</b>
 
-          <button data-plus="${product.id}">
+          <button data-plus="${escapeHTML(product.id)}">
             +
           </button>
 
@@ -701,6 +768,10 @@ async function createOrder() {
     throw new Error("No se ha identificado la tienda");
   }
 
+  if (!currentStore?.slug) {
+    throw new Error("No se ha identificado el establecimiento");
+  }
+
   const name =
     document.getElementById("customerName")
       ?.value.trim() || "";
@@ -717,8 +788,8 @@ async function createOrder() {
     document.getElementById("address")
       ?.value.trim() || "";
 
-  if (name.length < 2) {
-    throw new Error("Escribe tu nombre");
+  if (name.length < 2 || name.length > 100) {
+    throw new Error("Escribe un nombre válido");
   }
 
   const phone = validatePhone(rawPhone);
@@ -731,18 +802,40 @@ async function createOrder() {
     throw new Error("Escribe la dirección de entrega");
   }
 
+  if (cart.length > 30) {
+    throw new Error("El carrito supera el máximo de 30 productos");
+  }
+
+  // Comprobar que todos los productos del carrito
+  // pertenecen al catálogo de la tienda actual.
+  for (const item of cart) {
+    const product = products.find(
+      product => product.id === item.id
+    );
+
+    if (
+      !product ||
+      !Number.isInteger(item.qty) ||
+      item.qty < 1 ||
+      item.qty > 99
+    ) {
+      throw new Error(
+        "Hay un producto inválido en el carrito. Actualiza el catálogo."
+      );
+    }
+  }
+
   const items = cart.map(item => ({
     product_id: item.id,
     quantity: item.qty
   }));
 
   /*
-   * Se conserva la llamada original al RPC.
-   * Todavía falta adaptar la función SQL para
-   * recibir y validar p_store_id.
+   * NUEVA FUNCIÓN SQL:
+   * Recibirá seis parámetros.
    *
-   * No enviar pedidos de la Demo hasta completar
-   * esa adaptación y verificar el aislamiento.
+   * No publicar este archivo hasta instalar
+   * la función SQL compatible.
    */
 
   const result = await supabaseRequest(
@@ -750,6 +843,7 @@ async function createOrder() {
     {
       method: "POST",
       body: JSON.stringify({
+        p_store_id: currentStoreId,
         p_customer_name: name,
         p_customer_phone: phone,
         p_delivery_type: delivery,
@@ -853,6 +947,7 @@ async function sendWhatsApp() {
       "?text=" +
       encodeURIComponent(lines.join("\n"));
 
+    // Vaciar solamente el carrito de esta tienda.
     cart = [];
     save();
     renderCart();
