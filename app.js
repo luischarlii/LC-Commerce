@@ -244,7 +244,7 @@ async function loadStore() {
 }
 
 // ===================================
-// VALIDAR TELÉFONO DEL CLIENTE
+// VALIDAR TELÉFONO
 // ===================================
 
 function normalizePhone(value) {
@@ -631,7 +631,7 @@ function getTotal() {
 }
 
 // ===================================
-// MOSTRAR CARRITO CON FOTOS ORIGINALES
+// MOSTRAR CARRITO CON FOTOS
 // ===================================
 
 function renderCart() {
@@ -878,7 +878,7 @@ async function createOrder() {
     quantity: item.qty
   }));
 
-  // Función SQL nueva de seis parámetros.
+  // Función SQL de seis parámetros.
 
   const result = await supabaseRequest(
     "rpc/lc_commerce_create_order",
@@ -921,27 +921,25 @@ async function createOrder() {
 }
 
 // ===================================
-// WHATSAPP DEL NEGOCIO
+// WHATSAPP - DESTINATARIO DE PRUEBA
 // ===================================
 
 async function sendWhatsApp() {
   if (submitting) return;
 
-  // El destinatario siempre es el negocio.
-  const businessPhone =
-    normalizePhone(WHATSAPP_NUMBER);
-
-  if (
-    !/^52\d{10}$/.test(businessPhone)
-  ) {
-    return toast(
-      "Configura el WhatsApp del negocio"
-    );
-  }
-
   submitting = true;
 
   try {
+    // El teléfono escrito en el formulario
+    // será también el destinatario de WhatsApp.
+
+    const customerPhone =
+      document.getElementById("customerPhone")
+        ?.value.trim() || "";
+
+    const whatsappRecipient =
+      validatePhone(customerPhone);
+
     toast("Registrando pedido...");
 
     const order = await createOrder();
@@ -988,11 +986,12 @@ async function sendWhatsApp() {
       "Pedido registrado. Pendiente de confirmación."
     );
 
-    // IMPORTANTE:
-    // El número del cliente NO se usa como destinatario.
+    // El destino es el teléfono escrito
+    // en el campo customerPhone.
+
     const url =
       "https://wa.me/" +
-      businessPhone +
+      whatsappRecipient +
       "?text=" +
       encodeURIComponent(lines.join("\n"));
 
@@ -1090,7 +1089,7 @@ document.getElementById("closeCart")
   ?.addEventListener("click", closeCart);
 
 // ===================================
-// WHATSAPP: CONTROL DEL DESTINATARIO
+// WHATSAPP: CONTROL DEL BOTÓN
 // ===================================
 
 const whatsappButton =
