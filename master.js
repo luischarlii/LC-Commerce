@@ -96,7 +96,10 @@ loginForm.addEventListener("submit", async event => {
     document.getElementById("loginPassword").value;
 
   if (!email || !password) {
-    showMessage("Escribe tu correo y contraseña.", "error");
+    showMessage(
+      "Escribe tu correo y contraseña.",
+      "error"
+    );
     return;
   }
 
@@ -122,7 +125,8 @@ loginForm.addEventListener("submit", async event => {
     const {
       data: { session },
       error: sessionError
-    } = await supabaseClient.auth.getSession();
+    } =
+      await supabaseClient.auth.getSession();
 
     if (sessionError) throw sessionError;
 
@@ -136,10 +140,15 @@ loginForm.addEventListener("submit", async event => {
 
     await loadStores();
 
-    showMessage("Acceso maestro iniciado correctamente.");
+    showMessage(
+      "Acceso maestro iniciado correctamente."
+    );
 
   } catch (error) {
-    console.error("Error de acceso maestro:", error);
+    console.error(
+      "Error de acceso maestro:",
+      error
+    );
 
     showLogin();
 
@@ -152,7 +161,8 @@ loginForm.addEventListener("submit", async event => {
   } finally {
     loginInProgress = false;
     loginButton.disabled = false;
-    loginButton.textContent = "Iniciar sesión";
+    loginButton.textContent =
+      "Iniciar sesión";
   }
 });
 
@@ -167,14 +177,20 @@ document.getElementById("logoutBtn")
       await supabaseClient.auth.signOut();
 
     if (error) {
-      showMessage(error.message, "error");
+      showMessage(
+        error.message,
+        "error"
+      );
       return;
     }
 
     showLogin();
+
     storesList.innerHTML = "";
 
-    showMessage("Sesión cerrada.");
+    showMessage(
+      "Sesión cerrada."
+    );
   });
 
 // ==========================================
@@ -182,25 +198,36 @@ document.getElementById("logoutBtn")
 // ==========================================
 
 async function checkSession() {
+
   loginButton.disabled = true;
-  loginButton.textContent = "Comprobando acceso...";
+
+  loginButton.textContent =
+    "Comprobando acceso...";
 
   try {
+
     const {
       data: { session },
       error
-    } = await supabaseClient.auth.getSession();
+    } =
+      await supabaseClient.auth.getSession();
 
     if (error) throw error;
 
     if (session) {
+
       showMaster();
+
       await loadStores();
+
     } else {
+
       showLogin();
+
     }
 
   } catch (error) {
+
     console.error(
       "Error comprobando sesión:",
       error
@@ -215,9 +242,13 @@ async function checkSession() {
     );
 
   } finally {
+
     initializing = false;
+
     loginButton.disabled = false;
-    loginButton.textContent = "Iniciar sesión";
+
+    loginButton.textContent =
+      "Iniciar sesión";
   }
 }
 
@@ -226,16 +257,21 @@ async function checkSession() {
 // ==========================================
 
 async function loadStores() {
+
   storesList.innerHTML =
     '<p class="note">Consultando tiendas...</p>';
 
   try {
+
     const {
       data: { session },
       error: sessionError
-    } = await supabaseClient.auth.getSession();
+    } =
+      await supabaseClient.auth.getSession();
 
-    if (sessionError) throw sessionError;
+    if (sessionError) {
+      throw sessionError;
+    }
 
     if (!session) {
       throw new Error(
@@ -251,10 +287,14 @@ async function loadStores() {
         )
         .order(
           "created_at",
-          { ascending: false }
+          {
+            ascending: false
+          }
         );
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
     if (!data || data.length === 0) {
 
@@ -264,8 +304,15 @@ async function loadStores() {
       return;
     }
 
+    // ======================================
+    // MOSTRAR TIENDAS
+    // El ID se conserva en Supabase,
+    // pero NO se muestra al usuario.
+    // ======================================
+
     storesList.innerHTML =
       data.map(store => `
+
         <div class="store">
 
           <div class="store-name">
@@ -277,16 +324,12 @@ async function loadStores() {
             ${escapeHTML(store.slug)}
           </div>
 
-          <div class="store-detail">
-            ID:
-            ${escapeHTML(store.id)}
-          </div>
-
           <span class="status">
             ${escapeHTML(store.status)}
           </span>
 
         </div>
+
       `).join("");
 
   } catch (error) {
@@ -339,6 +382,10 @@ createStoreForm.addEventListener(
         .trim()
         .toLowerCase();
 
+    // ======================================
+    // VALIDAR CAMPOS
+    // ======================================
+
     if (
       !storeName ||
       !slug ||
@@ -353,8 +400,14 @@ createStoreForm.addEventListener(
       return;
     }
 
+    // ======================================
+    // VALIDAR SLUG
+    // ======================================
+
     if (
-      !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)
+      !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(
+        slug
+      )
     ) {
 
       showMessage(
@@ -372,6 +425,10 @@ createStoreForm.addEventListener(
 
     try {
 
+      // ====================================
+      // COMPROBAR SESIÓN
+      // ====================================
+
       const {
         data: { session },
         error: sessionError
@@ -388,6 +445,10 @@ createStoreForm.addEventListener(
         );
       }
 
+      // ====================================
+      // LLAMAR EDGE FUNCTION
+      // ====================================
+
       const response =
         await fetch(
           CREATE_STORE_FUNCTION,
@@ -395,6 +456,7 @@ createStoreForm.addEventListener(
             method: "POST",
 
             headers: {
+
               "Content-Type":
                 "application/json",
 
@@ -406,6 +468,7 @@ createStoreForm.addEventListener(
             },
 
             body: JSON.stringify({
+
               store_name:
                 storeName,
 
@@ -414,12 +477,17 @@ createStoreForm.addEventListener(
 
               owner_email:
                 ownerEmail
+
             })
           }
         );
 
       const result =
         await response.json();
+
+      // ====================================
+      // COMPROBAR RESPUESTA
+      // ====================================
 
       if (
         !response.ok ||
@@ -432,12 +500,24 @@ createStoreForm.addEventListener(
         );
       }
 
+      // ====================================
+      // LIMPIAR FORMULARIO
+      // ====================================
+
       createStoreForm.reset();
+
+      // ====================================
+      // MENSAJE
+      // ====================================
 
       showMessage(
         "Tienda creada e invitación enviada a " +
         ownerEmail
       );
+
+      // ====================================
+      // ACTUALIZAR LISTADO
+      // ====================================
 
       await loadStores();
 
@@ -514,6 +594,10 @@ document.getElementById("storeName")
     }
   );
 
+// ==========================================
+// SLUG MANUAL
+// ==========================================
+
 document.getElementById("storeSlug")
   .addEventListener(
     "input",
@@ -521,6 +605,7 @@ document.getElementById("storeSlug")
 
       event.target.dataset.manual =
         "true";
+
     }
   );
 
