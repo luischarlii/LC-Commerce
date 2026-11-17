@@ -1,9 +1,7 @@
-
 "use strict";
 
 // ==========================================
 // LC COMMERCE - PANEL MAESTRO
-// DIAGNÓSTICO DE TIENDAS
 // ==========================================
 
 const SUPABASE_URL =
@@ -130,7 +128,7 @@ loginForm.addEventListener("submit", async event => {
 
     if (!session) {
       throw new Error(
-        "No se pudo recuperar la sesión."
+        "El acceso fue aceptado, pero no se pudo recuperar la sesión."
       );
     }
 
@@ -165,7 +163,8 @@ loginForm.addEventListener("submit", async event => {
 document.getElementById("logoutBtn")
   .addEventListener("click", async () => {
 
-    const { error } = await supabaseClient.auth.signOut();
+    const { error } =
+      await supabaseClient.auth.signOut();
 
     if (error) {
       showMessage(error.message, "error");
@@ -202,12 +201,16 @@ async function checkSession() {
     }
 
   } catch (error) {
-    console.error("Error comprobando sesión:", error);
+    console.error(
+      "Error comprobando sesión:",
+      error
+    );
 
     showLogin();
 
     showMessage(
-      "No se pudo comprobar la sesión: " + error.message,
+      "No se pudo comprobar la sesión: " +
+      error.message,
       "error"
     );
 
@@ -219,12 +222,12 @@ async function checkSession() {
 }
 
 // ==========================================
-// CARGAR TIENDAS - DIAGNÓSTICO
+// CARGAR TIENDAS
 // ==========================================
 
 async function loadStores() {
   storesList.innerHTML =
-    '<p class="note">Comprobando permisos...</p>';
+    '<p class="note">Consultando tiendas...</p>';
 
   try {
     const {
@@ -235,85 +238,70 @@ async function loadStores() {
     if (sessionError) throw sessionError;
 
     if (!session) {
-      throw new Error("No hay una sesión activa.");
+      throw new Error(
+        "No hay una sesión activa."
+      );
     }
 
-    // Comprobar administrador maestro
-    const { data: adminData, error: adminError } =
+    const { data, error } =
       await supabaseClient
-        .from("lc_commerce_platform_admins")
-        .select("user_id")
-        .eq("user_id", session.user.id);
-
-    if (adminError) throw adminError;
-
-    // Comprobar acceso a tiendas
-    const { data, error } = await supabaseClient
-      .from("lc_commerce_stores")
-      .select("id,name,slug,status,created_at")
-      .order("created_at", { ascending: false });
+        .from("lc_commerce_stores")
+        .select(
+          "id,name,slug,status,created_at"
+        )
+        .order(
+          "created_at",
+          { ascending: false }
+        );
 
     if (error) throw error;
 
-    // Mostrar diagnóstico
-    storesList.innerHTML = `
-      <div class="store">
-        <strong>DIAGNÓSTICO DEL SISTEMA</strong>
+    if (!data || data.length === 0) {
 
-        <p>Usuario: ${
-          escapeHTML(session.user.id)
-        }</p>
+      storesList.innerHTML =
+        '<p class="note">Todavía no hay tiendas registradas.</p>';
 
-        <p>Administrador encontrado: ${
-          adminData?.length || 0
-        }</p>
-
-        <p>Tiendas encontradas: ${
-          data?.length || 0
-        }</p>
-      </div>
-
-      ${
-        data?.map(store => `
-          <div class="store">
-
-            <div class="store-name">
-              ${escapeHTML(store.name)}
-            </div>
-
-            <div class="store-detail">
-              Dirección: ${escapeHTML(store.slug)}
-            </div>
-
-            <div class="store-detail">
-              ID: ${escapeHTML(store.id)}
-            </div>
-
-            <span class="status">
-              ${escapeHTML(store.status)}
-            </span>
-
-          </div>
-        `).join("") || ""
-      }
-    `;
-
-    console.log("Diagnóstico LC Commerce:", {
-      usuario: session.user.id,
-      administradores: adminData,
-      tiendas: data
-    });
-
-  } catch (error) {
-    console.error("Diagnóstico de tiendas:", error);
+      return;
+    }
 
     storesList.innerHTML =
-      '<p class="note">Error: ' +
-      escapeHTML(error.message) +
-      '</p>';
+      data.map(store => `
+        <div class="store">
+
+          <div class="store-name">
+            ${escapeHTML(store.name)}
+          </div>
+
+          <div class="store-detail">
+            Dirección:
+            ${escapeHTML(store.slug)}
+          </div>
+
+          <div class="store-detail">
+            ID:
+            ${escapeHTML(store.id)}
+          </div>
+
+          <span class="status">
+            ${escapeHTML(store.status)}
+          </span>
+
+        </div>
+      `).join("");
+
+  } catch (error) {
+
+    console.error(
+      "Error cargando tiendas:",
+      error
+    );
+
+    storesList.innerHTML =
+      '<p class="note">No se pudo consultar el listado de tiendas.</p>';
 
     showMessage(
-      "Error al consultar tiendas: " + error.message,
+      "La sesión está iniciada, pero no se pudieron consultar las tiendas: " +
+      error.message,
       "error"
     );
   }
@@ -323,138 +311,237 @@ async function loadStores() {
 // CREAR TIENDA
 // ==========================================
 
-createStoreForm.addEventListener("submit", async event => {
-  event.preventDefault();
+createStoreForm.addEventListener(
+  "submit",
+  async event => {
 
-  clearMessage();
+    event.preventDefault();
 
-  const storeName =
-    document.getElementById("storeName").value.trim();
+    clearMessage();
 
-  const slug =
-    document.getElementById("storeSlug").value.trim().toLowerCase();
+    const storeName =
+      document
+        .getElementById("storeName")
+        .value
+        .trim();
 
-  const ownerEmail =
-    document.getElementById("ownerEmail").value.trim().toLowerCase();
+    const slug =
+      document
+        .getElementById("storeSlug")
+        .value
+        .trim()
+        .toLowerCase();
 
-  if (!storeName || !slug || !ownerEmail) {
-    showMessage("Completa todos los campos.", "error");
-    return;
-  }
+    const ownerEmail =
+      document
+        .getElementById("ownerEmail")
+        .value
+        .trim()
+        .toLowerCase();
 
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) {
-    showMessage(
-      "La dirección solo puede contener minúsculas, números y guiones.",
-      "error"
-    );
-    return;
-  }
+    if (
+      !storeName ||
+      !slug ||
+      !ownerEmail
+    ) {
 
-  createStoreBtn.disabled = true;
-  createStoreBtn.textContent = "Creando tienda...";
-
-  try {
-    const {
-      data: { session },
-      error: sessionError
-    } = await supabaseClient.auth.getSession();
-
-    if (sessionError || !session) {
-      throw new Error(
-        "Tu sesión terminó. Inicia sesión nuevamente."
+      showMessage(
+        "Completa todos los campos.",
+        "error"
       );
+
+      return;
     }
 
-    const response = await fetch(CREATE_STORE_FUNCTION, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": SUPABASE_KEY,
-        "Authorization": `Bearer ${session.access_token}`
-      },
-      body: JSON.stringify({
-        store_name: storeName,
-        slug,
-        owner_email: ownerEmail
-      })
-    });
+    if (
+      !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)
+    ) {
 
-    const result = await response.json();
-
-    if (!response.ok || !result.success) {
-      throw new Error(
-        result.error || "No se pudo crear la tienda."
+      showMessage(
+        "La dirección solo puede contener minúsculas, números y guiones.",
+        "error"
       );
+
+      return;
     }
 
-    createStoreForm.reset();
+    createStoreBtn.disabled = true;
 
-    showMessage(
-      "Tienda creada e invitación enviada a " + ownerEmail
-    );
-
-    await loadStores();
-
-  } catch (error) {
-    console.error("Error creando tienda:", error);
-
-    showMessage(
-      error.message || "Error al crear la tienda.",
-      "error"
-    );
-
-  } finally {
-    createStoreBtn.disabled = false;
     createStoreBtn.textContent =
-      "Crear tienda y enviar invitación";
+      "Creando tienda...";
+
+    try {
+
+      const {
+        data: { session },
+        error: sessionError
+      } =
+        await supabaseClient.auth.getSession();
+
+      if (
+        sessionError ||
+        !session
+      ) {
+
+        throw new Error(
+          "Tu sesión terminó. Inicia sesión nuevamente."
+        );
+      }
+
+      const response =
+        await fetch(
+          CREATE_STORE_FUNCTION,
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              "apikey":
+                SUPABASE_KEY,
+
+              "Authorization":
+                `Bearer ${session.access_token}`
+            },
+
+            body: JSON.stringify({
+              store_name:
+                storeName,
+
+              slug:
+                slug,
+
+              owner_email:
+                ownerEmail
+            })
+          }
+        );
+
+      const result =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !result.success
+      ) {
+
+        throw new Error(
+          result.error ||
+          "No se pudo crear la tienda."
+        );
+      }
+
+      createStoreForm.reset();
+
+      showMessage(
+        "Tienda creada e invitación enviada a " +
+        ownerEmail
+      );
+
+      await loadStores();
+
+    } catch (error) {
+
+      console.error(
+        "Error creando tienda:",
+        error
+      );
+
+      showMessage(
+        error.message ||
+        "Error al crear la tienda.",
+        "error"
+      );
+
+    } finally {
+
+      createStoreBtn.disabled = false;
+
+      createStoreBtn.textContent =
+        "Crear tienda y enviar invitación";
+    }
   }
-});
+);
 
 // ==========================================
 // ACTUALIZAR LISTADO
 // ==========================================
 
 document.getElementById("refreshBtn")
-  .addEventListener("click", loadStores);
+  .addEventListener(
+    "click",
+    loadStores
+  );
 
 // ==========================================
 // GENERAR SLUG AUTOMÁTICO
 // ==========================================
 
 document.getElementById("storeName")
-  .addEventListener("input", event => {
+  .addEventListener(
+    "input",
+    event => {
 
-    const slugInput =
-      document.getElementById("storeSlug");
+      const slugInput =
+        document.getElementById(
+          "storeSlug"
+        );
 
-    if (slugInput.dataset.manual === "true") return;
+      if (
+        slugInput.dataset.manual ===
+        "true"
+      ) {
+        return;
+      }
 
-    slugInput.value = event.target.value
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-  });
+      slugInput.value =
+        event.target.value
+          .normalize("NFD")
+          .replace(
+            /[\u0300-\u036f]/g,
+            ""
+          )
+          .toLowerCase()
+          .trim()
+          .replace(
+            /[^a-z0-9]+/g,
+            "-"
+          )
+          .replace(
+            /^-+|-+$/g,
+            "");
+    }
+  );
 
 document.getElementById("storeSlug")
-  .addEventListener("input", event => {
-    event.target.dataset.manual = "true";
-  });
+  .addEventListener(
+    "input",
+    event => {
+
+      event.target.dataset.manual =
+        "true";
+    }
+  );
 
 // ==========================================
 // SEGURIDAD HTML
 // ==========================================
 
 function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, char => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  })[char]);
+
+  return String(
+    value ?? ""
+  ).replace(
+    /[&<>"']/g,
+    char => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[char]
+  );
 }
 
 // ==========================================
