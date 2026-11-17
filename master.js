@@ -14,7 +14,11 @@ const SUPABASE_KEY =
 const CREATE_STORE_FUNCTION =
   `${SUPABASE_URL}/functions/v1/lc-commerce-create-store`;
 
-const supabase = window.supabase.createClient(
+// ==========================================
+// CONEXIÓN SUPABASE
+// ==========================================
+
+const supabaseClient = window.supabase.createClient(
   SUPABASE_URL,
   SUPABASE_KEY,
   {
@@ -103,7 +107,7 @@ loginForm.addEventListener("submit", async event => {
 
   try {
     const { data, error } =
-      await supabase.auth.signInWithPassword({
+      await supabaseClient.auth.signInWithPassword({
         email,
         password
       });
@@ -116,11 +120,10 @@ loginForm.addEventListener("submit", async event => {
       );
     }
 
-    // Confirmar que la sesión quedó guardada.
     const {
       data: { session },
       error: sessionError
-    } = await supabase.auth.getSession();
+    } = await supabaseClient.auth.getSession();
 
     if (sessionError) throw sessionError;
 
@@ -131,6 +134,7 @@ loginForm.addEventListener("submit", async event => {
     }
 
     showMaster();
+
     await loadStores();
 
     showMessage("Acceso maestro iniciado correctamente.");
@@ -160,7 +164,7 @@ loginForm.addEventListener("submit", async event => {
 document.getElementById("logoutBtn")
   .addEventListener("click", async () => {
 
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabaseClient.auth.signOut();
 
     if (error) {
       showMessage(error.message, "error");
@@ -185,7 +189,7 @@ async function checkSession() {
     const {
       data: { session },
       error
-    } = await supabase.auth.getSession();
+    } = await supabaseClient.auth.getSession();
 
     if (error) throw error;
 
@@ -222,7 +226,7 @@ async function loadStores() {
     '<p class="note">Consultando tiendas...</p>';
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from("lc_commerce_stores")
       .select("id,name,slug,status,created_at")
       .order("created_at", { ascending: false });
@@ -237,6 +241,7 @@ async function loadStores() {
 
     storesList.innerHTML = data.map(store => `
       <div class="store">
+
         <div class="store-name">
           ${escapeHTML(store.name)}
         </div>
@@ -252,6 +257,7 @@ async function loadStores() {
         <span class="status">
           ${escapeHTML(store.status)}
         </span>
+
       </div>
     `).join("");
 
@@ -275,6 +281,7 @@ async function loadStores() {
 
 createStoreForm.addEventListener("submit", async event => {
   event.preventDefault();
+
   clearMessage();
 
   const storeName =
@@ -306,7 +313,7 @@ createStoreForm.addEventListener("submit", async event => {
     const {
       data: { session },
       error: sessionError
-    } = await supabase.auth.getSession();
+    } = await supabaseClient.auth.getSession();
 
     if (sessionError || !session) {
       throw new Error(
