@@ -129,12 +129,10 @@ async function compressProductImage(file) {
 
     context.drawImage(image, 0, 0, width, height);
 
-    // Intentar WebP primero.
     let blob = await new Promise(resolve => {
       canvas.toBlob(resolve, "image/webp", 0.80);
     });
 
-    // Si el navegador no genera WebP, utilizar JPG.
     if (!blob || blob.type !== "image/webp") {
       blob = await new Promise(resolve => {
         canvas.toBlob(resolve, "image/jpeg", 0.84);
@@ -371,6 +369,7 @@ adminStyles.textContent = `
   .lc-actions {
     display:flex;
     gap:8px;
+    flex-wrap:wrap;
   }
 
   .lc-actions button {
@@ -380,6 +379,11 @@ adminStyles.textContent = `
 
   .lc-secondary {
     background:#334155!important;
+    color:white!important;
+  }
+
+  .lc-delete {
+    background:#991b1b!important;
     color:white!important;
   }
 
@@ -530,6 +534,13 @@ function renderProducts(editing = null) {
             data-toggle="${product.id}">
             ${product.active ? "Desactivar" : "Activar"}
           </button>
+
+          <button
+            type="button"
+            class="lc-delete"
+            data-delete="${product.id}">
+            🗑️ Eliminar
+          </button>
         </div>
       </div>
     `;
@@ -595,8 +606,7 @@ function renderProducts(editing = null) {
 
       <input
         id="productImage"
-        type="url"
-        placeholder="O pega una URL de imagen"
+        type="hidden"
         value="${escapeHTML(p.image_url || "")}">
 
       <select id="productActive">
@@ -691,6 +701,10 @@ function renderProducts(editing = null) {
 
   workspace.querySelectorAll("[data-toggle]").forEach(button => {
     button.onclick = () => toggleProduct(button.dataset.toggle);
+  });
+
+  workspace.querySelectorAll("[data-delete]").forEach(button => {
+    button.onclick = () => deleteProduct(button.dataset.delete);
   });
 }
 
@@ -823,6 +837,48 @@ async function toggleProduct(id) {
 
   } catch (error) {
     alert("No se pudo actualizar: " + error.message);
+  }
+}
+
+// ======================================
+// ELIMINAR PRODUCTO
+// ======================================
+
+async function deleteProduct(id) {
+  const product = products.find(p => p.id === id);
+
+  if (!product) return;
+
+  const confirmed = confirm(
+    `¿Estás seguro de eliminar "${product.name}"?\n\n` +
+    "El producto dejará de aparecer en el catálogo. " +
+    "Esta acción no se puede deshacer."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    await api(
+      "/rest/v1/lc_commerce_products?id=eq." +
+      encodeURIComponent(id),
+      {
+        method: "DELETE",
+        headers: {
+          Prefer: "return=minimal"
+        }
+      }
+    );
+
+    await loadProducts();
+    renderProducts();
+
+    showMessage("Producto eliminado correctamente.");
+
+  } catch (error) {
+    alert(
+      "No se pudo eliminar el producto:\n" +
+      error.message
+    );
   }
 }
 
