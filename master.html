@@ -1,0 +1,309 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1020">
+  <title>LC Commerce | Panel Maestro</title>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      background: #0b1020;
+      color: #f5f5f5;
+      font-family: Arial, sans-serif;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 850px;
+      margin: 0 auto;
+    }
+
+    header {
+      padding: 18px 0 25px;
+      border-bottom: 1px solid #263149;
+      margin-bottom: 25px;
+    }
+
+    .brand {
+      font-size: 27px;
+      font-weight: 800;
+      color: #fbbf24;
+    }
+
+    .brand span { color: white; }
+
+    .subtitle {
+      color: #aab4c8;
+      margin-top: 7px;
+      font-size: 14px;
+    }
+
+    .panel {
+      background: #141e32;
+      border: 1px solid #293650;
+      border-radius: 15px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    h1, h2 { margin-top: 0; }
+
+    h2 {
+      font-size: 19px;
+      color: #fbbf24;
+    }
+
+    label {
+      display: block;
+      margin: 15px 0 7px;
+      color: #dbe3f2;
+      font-size: 14px;
+    }
+
+    input {
+      width: 100%;
+      padding: 14px;
+      border-radius: 9px;
+      border: 1px solid #394763;
+      background: #0b1426;
+      color: white;
+      font-size: 16px;
+      outline: none;
+    }
+
+    input:focus { border-color: #fbbf24; }
+
+    button {
+      border: 0;
+      border-radius: 9px;
+      padding: 14px 17px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .primary {
+      width: 100%;
+      margin-top: 18px;
+      color: #171717;
+      background: #fbbf24;
+    }
+
+    .secondary {
+      background: #263650;
+      color: white;
+    }
+
+    .danger {
+      background: #572b35;
+      color: #ffd9df;
+    }
+
+    .hidden { display: none !important; }
+
+    .note {
+      color: #9eabc1;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    #message {
+      display: none;
+      padding: 13px;
+      margin: 15px 0;
+      border-radius: 9px;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    #message.success {
+      display: block;
+      background: #153c31;
+      color: #a8f0d1;
+    }
+
+    #message.error {
+      display: block;
+      background: #48242c;
+      color: #ffc5ce;
+    }
+
+    .store {
+      padding: 15px 0;
+      border-bottom: 1px solid #293650;
+    }
+
+    .store:last-child { border-bottom: 0; }
+
+    .store-name {
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    .store-detail {
+      color: #aab4c8;
+      font-size: 13px;
+      margin-top: 6px;
+      overflow-wrap: anywhere;
+    }
+
+    .status {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 5px 9px;
+      border-radius: 20px;
+      font-size: 12px;
+      background: #263650;
+      color: #dbeafe;
+    }
+
+    .topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .topline button { padding: 10px 13px; }
+
+    .small-link {
+      color: #fbbf24;
+      text-decoration: none;
+      font-size: 13px;
+    }
+  </style>
+</head>
+
+<body>
+<div class="container">
+
+  <header>
+    <div class="brand">LC <span>Commerce</span></div>
+    <div class="subtitle">Panel de administración maestro</div>
+  </header>
+
+  <div id="message"></div>
+
+  <!-- ACCESO -->
+  <section id="loginPanel" class="panel">
+    <h1>Acceso maestro</h1>
+    <p class="note">
+      Ingresa con la cuenta maestra autorizada de LC Commerce.
+      No existe registro público desde esta pantalla.
+    </p>
+
+    <form id="loginForm">
+      <label for="loginEmail">Correo electrónico</label>
+      <input
+        id="loginEmail"
+        type="email"
+        autocomplete="username"
+        required>
+
+      <label for="loginPassword">Contraseña</label>
+      <input
+        id="loginPassword"
+        type="password"
+        autocomplete="current-password"
+        required>
+
+      <button class="primary" type="submit">
+        Iniciar sesión
+      </button>
+    </form>
+  </section>
+
+  <!-- PANEL MAESTRO -->
+  <section id="masterPanel" class="hidden">
+
+    <div class="panel">
+      <div class="topline">
+        <h1>Administración</h1>
+        <button id="logoutBtn" class="danger" type="button">
+          Cerrar sesión
+        </button>
+      </div>
+
+      <p class="note">
+        Desde aquí puedes registrar negocios y enviar
+        invitaciones a sus propietarios.
+      </p>
+    </div>
+
+    <!-- CREAR TIENDA -->
+    <div class="panel">
+      <h2>➕ Crear nueva tienda</h2>
+
+      <form id="createStoreForm">
+
+        <label for="storeName">Nombre del negocio</label>
+        <input
+          id="storeName"
+          type="text"
+          maxlength="100"
+          placeholder="Ej. Pizzería La Familia"
+          required>
+
+        <label for="storeSlug">Dirección independiente</label>
+        <input
+          id="storeSlug"
+          type="text"
+          maxlength="80"
+          placeholder="pizzeria-la-familia"
+          pattern="[a-z0-9]+(-[a-z0-9]+)*"
+          required>
+
+        <p class="note">
+          Se utilizará como identificador de la tienda.
+          Solo minúsculas, números y guiones.
+        </p>
+
+        <label for="ownerEmail">Correo del propietario</label>
+        <input
+          id="ownerEmail"
+          type="email"
+          maxlength="254"
+          placeholder="propietario@correo.com"
+          required>
+
+        <button id="createStoreBtn" class="primary" type="submit">
+          Crear tienda y enviar invitación
+        </button>
+      </form>
+    </div>
+
+    <!-- LISTADO -->
+    <div class="panel">
+      <div class="topline">
+        <h2>🏪 Tiendas registradas</h2>
+        <button id="refreshBtn" class="secondary" type="button">
+          Actualizar
+        </button>
+      </div>
+
+      <div id="storesList">
+        <p class="note">Cargando tiendas...</p>
+      </div>
+    </div>
+
+  </section>
+
+  <p class="note" style="text-align:center;margin-top:25px">
+    LC Commerce · Administración central
+  </p>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./master.js"></script>
+
+</body>
+</html>
