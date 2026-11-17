@@ -12,10 +12,8 @@ const SUPABASE_URL =
 const SUPABASE_KEY =
   "sb_publishable_aB8Bk75Nidcd-pCeba5NmQ_cgOPOqnp";
 
-// Configuración del negocio
-const WHATSAPP_NUMBER = "526144180552";
+// Configuración general
 const MERCADO_PAGO_URL = "";
-
 const DEFAULT_STORE_SLUG = "lc-commerce-principal";
 
 // ===================================
@@ -229,6 +227,11 @@ async function loadStore() {
     store.id
   );
 
+  console.log(
+    "WhatsApp de la tienda:",
+    store.whatsapp_number
+  );
+
   document.title =
     `${store.name} - LC Commerce`;
 
@@ -264,6 +267,34 @@ function validatePhone(value) {
 
   throw new Error(
     "Escribe un teléfono válido: 10 dígitos o 52 seguido de los 10 dígitos."
+  );
+}
+
+// ===================================
+// VALIDAR WHATSAPP DE LA TIENDA
+// ===================================
+
+function getStoreWhatsApp() {
+  const phone = normalizePhone(
+    currentStore?.whatsapp_number
+  );
+
+  if (!phone) {
+    throw new Error(
+      "Esta tienda todavía no tiene un número de WhatsApp configurado."
+    );
+  }
+
+  if (/^\d{10}$/.test(phone)) {
+    return "52" + phone;
+  }
+
+  if (/^52\d{10}$/.test(phone)) {
+    return phone;
+  }
+
+  throw new Error(
+    "El WhatsApp configurado para esta tienda no es válido. Revisa el número en Supabase."
   );
 }
 
@@ -878,8 +909,6 @@ async function createOrder() {
     quantity: item.qty
   }));
 
-  // Función SQL de seis parámetros.
-
   const result = await supabaseRequest(
     "rpc/lc_commerce_create_order",
     {
@@ -921,7 +950,7 @@ async function createOrder() {
 }
 
 // ===================================
-// WHATSAPP - DESTINATARIO DE PRUEBA
+// WHATSAPP - NÚMERO DE CADA TIENDA
 // ===================================
 
 async function sendWhatsApp() {
@@ -930,15 +959,11 @@ async function sendWhatsApp() {
   submitting = true;
 
   try {
-    // El teléfono escrito en el formulario
-    // será también el destinatario de WhatsApp.
-
-    const customerPhone =
-      document.getElementById("customerPhone")
-        ?.value.trim() || "";
+    // Obtener el WhatsApp de la tienda actual.
+    // No se utiliza el teléfono del cliente como destino.
 
     const whatsappRecipient =
-      validatePhone(customerPhone);
+      getStoreWhatsApp();
 
     toast("Registrando pedido...");
 
@@ -986,9 +1011,7 @@ async function sendWhatsApp() {
       "Pedido registrado. Pendiente de confirmación."
     );
 
-    // El destino es el teléfono escrito
-    // en el campo customerPhone.
-
+    // Abrir WhatsApp de la tienda.
     const url =
       "https://wa.me/" +
       whatsappRecipient +
