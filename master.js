@@ -3,6 +3,7 @@
 
 // ==========================================
 // LC COMMERCE - PANEL MAESTRO
+// DIAGNÓSTICO DE TIENDAS
 // ==========================================
 
 const SUPABASE_URL =
@@ -129,7 +130,7 @@ loginForm.addEventListener("submit", async event => {
 
     if (!session) {
       throw new Error(
-        "El acceso fue aceptado, pero no se pudo recuperar la sesión."
+        "No se pudo recuperar la sesión."
       );
     }
 
@@ -218,14 +219,35 @@ async function checkSession() {
 }
 
 // ==========================================
-// CARGAR TIENDAS
+// CARGAR TIENDAS - DIAGNÓSTICO
 // ==========================================
 
 async function loadStores() {
   storesList.innerHTML =
-    '<p class="note">Consultando tiendas...</p>';
+    '<p class="note">Comprobando permisos...</p>';
 
   try {
+    const {
+      data: { session },
+      error: sessionError
+    } = await supabaseClient.auth.getSession();
+
+    if (sessionError) throw sessionError;
+
+    if (!session) {
+      throw new Error("No hay una sesión activa.");
+    }
+
+    // Comprobar administrador maestro
+    const { data: adminData, error: adminError } =
+      await supabaseClient
+        .from("lc_commerce_platform_admins")
+        .select("user_id")
+        .eq("user_id", session.user.id);
+
+    if (adminError) throw adminError;
+
+    // Comprobar acceso a tiendas
     const { data, error } = await supabaseClient
       .from("lc_commerce_stores")
       .select("id,name,slug,status,created_at")
@@ -233,43 +255,65 @@ async function loadStores() {
 
     if (error) throw error;
 
-    if (!data || data.length === 0) {
-      storesList.innerHTML =
-        '<p class="note">Todavía no hay tiendas registradas.</p>';
-      return;
-    }
-
-    storesList.innerHTML = data.map(store => `
+    // Mostrar diagnóstico
+    storesList.innerHTML = `
       <div class="store">
+        <strong>DIAGNÓSTICO DEL SISTEMA</strong>
 
-        <div class="store-name">
-          ${escapeHTML(store.name)}
-        </div>
+        <p>Usuario: ${
+          escapeHTML(session.user.id)
+        }</p>
 
-        <div class="store-detail">
-          Dirección: ${escapeHTML(store.slug)}
-        </div>
+        <p>Administrador encontrado: ${
+          adminData?.length || 0
+        }</p>
 
-        <div class="store-detail">
-          ID: ${escapeHTML(store.id)}
-        </div>
-
-        <span class="status">
-          ${escapeHTML(store.status)}
-        </span>
-
+        <p>Tiendas encontradas: ${
+          data?.length || 0
+        }</p>
       </div>
-    `).join("");
+
+      ${
+        data?.map(store => `
+          <div class="store">
+
+            <div class="store-name">
+              ${escapeHTML(store.name)}
+            </div>
+
+            <div class="store-detail">
+              Dirección: ${escapeHTML(store.slug)}
+            </div>
+
+            <div class="store-detail">
+              ID: ${escapeHTML(store.id)}
+            </div>
+
+            <span class="status">
+              ${escapeHTML(store.status)}
+            </span>
+
+          </div>
+        `).join("") || ""
+      }
+    `;
+
+    console.log("Diagnóstico LC Commerce:", {
+      usuario: session.user.id,
+      administradores: adminData,
+      tiendas: data
+    });
 
   } catch (error) {
-    console.error("Error cargando tiendas:", error);
+    console.error("Diagnóstico de tiendas:", error);
 
     storesList.innerHTML =
-      '<p class="note">No se pudo consultar el listado de tiendas.</p>';
+      '<p class="note">Error: ' +
+      escapeHTML(error.message) +
+      '</p>';
 
     showMessage(
-      "La sesión está iniciada, pero no se pudieron consultar las tiendas: " +
-      error.message,
+      "Error al consultar tiendas: " + error.message,
       "error"
     );
   }
