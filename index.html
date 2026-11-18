@@ -19,7 +19,7 @@
 <header class="top">
   <div>
     <div class="brand" id="storeName">
-      LC Commerce
+      Cargando...
     </div>
     <div class="sub">
       Menú y pedidos por WhatsApp
@@ -33,7 +33,7 @@
 
 <section class="hero">
   <div>
-    <h1>Bienvenido 👋</h1>
+    <h1 id="heroTitle">Bienvenido 👋</h1>
     <p>
       Elige tus productos, revisa tu pedido
       y envíalo por WhatsApp.
@@ -89,31 +89,24 @@
     </select>
 
     <label for="address">Dirección / referencia</label>
-    <textarea
-      id="address"
-      rows="2"
-      placeholder="Calle, número, colonia y referencia">
-    </textarea>
+    <textarea id="address" rows="2" placeholder="Calle, número, colonia y referencia"></textarea>
 
     <button id="whatsappBtn" class="primary">
       📲 Enviar pedido por WhatsApp
     </button>
 
-    <button id="payBtn" class="pay">
-      💳 Pagar con Mercado Pago
-    </button>
-
-    <p class="note">
-      El botón de pago se conectará posteriormente
-      al enlace de Mercado Pago.
-    </p>
+    <div id="payBox" class="hidden">
+      <button id="payBtn" class="pay">
+        💳 Pagar con Mercado Pago
+      </button>
+    </div>
 
   </div>
 </div>
 
 <div id="toast"></div>
 
-<script src="./app.js?v=20261117-10"></script>
+<script src="./app.js?v=20261118-1"></script>
 
 </body>
 </html>
