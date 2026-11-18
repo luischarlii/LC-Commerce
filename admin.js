@@ -22,6 +22,9 @@ let categories = [];
 let products = [];
 let orders = [];
 let orderItems = [];
+let stores = [];
+let currentStore = null;
+let isMaster = false;
 
 // ======================================
 // UTILIDADES
@@ -49,6 +52,80 @@ function escapeHTML(value) {
     '"': "&quot;",
     "'": "&#39;"
   })[c]);
+}
+
+function storeId() {
+  if (!currentStore?.id) {
+    throw new Error("Selecciona un negocio.");
+  }
+
+  return currentStore.id;
+}
+
+function storeFilter() {
+  return "store_id=eq." + encodeURIComponent(storeId());
+}
+
+function storeName() {
+  return currentStore?.name || "tu negocio";
+}
+
+function storeUrl() {
+  return new URL(
+    "./?store=" + encodeURIComponent(currentStore?.slug || ""),
+    window.location.href
+  ).href;
+}
+
+function updateStoreHeader() {
+  const title = document.getElementById("welcomeTitle");
+  const link = document.getElementById("storeLink");
+
+  if (title) {
+    title.textContent = "Bienvenido a " + storeName();
+  }
+
+  if (link && currentStore?.slug) {
+    link.href = storeUrl();
+  }
+
+  document.title = "Administración | " + storeName();
+}
+
+async function loadMyStores() {
+  const base =
+    "/rest/v1/lc_commerce_stores?order=name.asc&select=";
+
+  try {
+    return await api(base + "id,name,slug,status,whatsapp_number");
+  } catch (_) {
+    return await api(base + "id,name,slug,status");
+  }
+}
+
+function setupStoreSelector() {
+  const picker = document.getElementById("storePicker");
+  const select = document.getElementById("storeSelect");
+
+  if (!picker || !select) return;
+
+  select.innerHTML = stores.map(store => `
+    <option value="${escapeHTML(store.id)}"
+      ${store.id === currentStore?.id ? "selected" : ""}>
+      ${escapeHTML(store.name)}
+    </option>
+  `).join("");
+
+  picker.style.display = stores.length > 1 ? "block" : "none";
+
+  select.onchange = async () => {
+    currentStore =
+      stores.find(store => store.id === select.value) ||
+      currentStore;
+
+    updateStoreHeader();
+    await loadDashboard();
+  };
 }
 
 async function api(path, options = {}, token = accessToken) {
@@ -251,15 +328,31 @@ async function verifyAdmin() {
   try {
     currentUser = await api("/auth/v1/user");
 
-    const admins = await api(
-      "/rest/v1/lc_commerce_admins?select=user_id&user_id=eq." +
-      encodeURIComponent(currentUser.id)
-    );
+    isMaster = false;
 
-    if (!Array.isArray(admins) || admins.length === 0) {
-      throw new Error("Cuenta sin autorización administrativa.");
+    try {
+      const admins = await api(
+        "/rest/v1/lc_commerce_admins?select=user_id&user_id=eq." +
+        encodeURIComponent(currentUser.id)
+      );
+
+      isMaster = Array.isArray(admins) && admins.length > 0;
+    } catch (_) {}
+
+    stores = await loadMyStores();
+
+    if (!Array.isArray(stores) || stores.length === 0) {
+      throw new Error(
+        "Esta cuenta no tiene ningún negocio asignado."
+      );
     }
 
+    currentStore =
+      stores.find(store => store.id === currentStore?.id) ||
+      stores[0];
+
+    setupStoreSelector();
+    updateStoreHeader();
     showAdmin();
     await loadDashboard();
 
@@ -327,6 +420,9 @@ document.getElementById("logoutBtn").onclick = async () => {
 
   accessToken = "";
   currentUser = null;
+  stores = [];
+  currentStore = null;
+  isMaster = false;
   loginForm.reset();
   showLogin();
   showMessage("Sesión cerrada.");
@@ -472,13 +568,13 @@ async function loadDashboard() {
 
 async function loadCategories() {
   categories = await api(
-    "/rest/v1/lc_commerce_categories?select=id,name,emoji,active&order=name.asc"
+    "/rest/v1/lc_commerce_categories?select=id,name,emoji,active&order=name.asc&" + storeFilter()
   );
 }
 
 async function loadProducts() {
   products = await api(
-    "/rest/v1/lc_commerce_products?select=id,category_id,name,description,price,image_url,active&order=created_at.desc"
+    "/rest/v1/lc_commerce_products?select=id,category_id,name,description,price,image_url,active&order=created_at.desc&" + storeFilter()
   );
 }
 
@@ -722,6 +818,7 @@ async function saveProduct(event) {
     document.getElementById("productImageFile").files[0];
 
   const product = {
+    store_id: storeId(),
     name: document.getElementById("productName").value.trim(),
     description: document.getElementById("productDescription").value.trim(),
     price: Number(document.getElementById("productPrice").value),
@@ -1007,6 +1104,7 @@ async function saveCategory(event) {
   const id = document.getElementById("categoryId").value;
 
   const category = {
+    store_id: storeId(),
     name: document.getElementById("categoryName").value.trim(),
     emoji: document.getElementById("categoryEmoji").value.trim() || "🏷️",
     active: document.getElementById("categoryActive").value === "true"
@@ -1169,13 +1267,22 @@ async function loadOrders() {
   orders = await api(
     "/rest/v1/lc_commerce_orders" +
     "?select=id,customer_name,customer_phone,delivery_type,address,total,status,payment_status,payment_reference,created_at" +
-    "&order=created_at.desc"
+    "&" + storeFilter() +
+    "&order=created_at.desc" +
+    "&limit=100"
   );
 
-  orderItems = await api(
-    "/rest/v1/lc_commerce_order_items" +
-    "?select=id,order_id,product_name,quantity,unit_price,subtotal"
-  );
+  const orderIds = orders.map(order => order.id);
+
+  orderItems = orderIds.length
+    ? await api(
+        "/rest/v1/lc_commerce_order_items" +
+        "?select=id,order_id,product_name,quantity,unit_price,subtotal" +
+        "&order_id=in.(" +
+        orderIds.map(encodeURIComponent).join(",") +
+        ")"
+      )
+    : [];
 }
 
 function formatDate(date) {
@@ -1207,7 +1314,7 @@ function getWhatsAppLink(order) {
   const shortId = String(order.id).slice(0, 8);
 
   const message =
-    `Hola ${order.customer_name}, te contactamos de LC Commerce. ` +
+    `Hola ${order.customer_name}, te contactamos de ${storeName()}. ` +
     `Tu pedido #${shortId} tiene un total de $${Number(order.total).toFixed(2)} MXN. ` +
     `Estamos dando seguimiento a tu compra. ¡Gracias!`;
 
@@ -1514,6 +1621,108 @@ async function openOrders() {
 }
 
 // ======================================
+// MI NEGOCIO
+// ======================================
+
+function renderBusiness() {
+  const whatsapp = currentStore?.whatsapp_number || "";
+
+  workspace.innerHTML = `
+    <h3>🏪 Mi negocio</h3>
+
+    <p><strong>${escapeHTML(storeName())}</strong></p>
+
+    <p class="lc-image-help">
+      Enlace de tu tienda para tus clientes:<br>
+      ${escapeHTML(storeUrl())}
+    </p>
+
+    <form id="businessForm" class="lc-form-grid">
+      <label for="businessWhatsapp">
+        WhatsApp donde recibirás los pedidos
+      </label>
+
+      <input
+        id="businessWhatsapp"
+        type="tel"
+        inputmode="tel"
+        maxlength="15"
+        placeholder="Ej. 6561234567"
+        value="${escapeHTML(whatsapp)}"
+        required>
+
+      <button type="submit">Guardar WhatsApp</button>
+
+      <button
+        type="button"
+        class="lc-secondary"
+        id="copyStoreLink">
+        Copiar enlace de mi tienda
+      </button>
+    </form>
+
+    <p id="businessMessage" class="lc-status"></p>
+  `;
+
+  document.getElementById("businessForm")
+    .addEventListener("submit", saveBusiness);
+
+  document.getElementById("copyStoreLink").onclick = async () => {
+    const status = document.getElementById("businessMessage");
+
+    try {
+      await navigator.clipboard.writeText(storeUrl());
+      status.textContent = "Enlace copiado.";
+    } catch (_) {
+      prompt("Copia el enlace de tu tienda:", storeUrl());
+    }
+  };
+}
+
+async function saveBusiness(event) {
+  event.preventDefault();
+
+  const status = document.getElementById("businessMessage");
+
+  const phone = document
+    .getElementById("businessWhatsapp")
+    .value
+    .replace(/\D/g, "");
+
+  if (!/^(52)?\d{10}$/.test(phone)) {
+    status.textContent =
+      "Escribe 10 dígitos (o 52 seguido de los 10 dígitos).";
+    return;
+  }
+
+  status.textContent = "Guardando...";
+
+  try {
+    const result = await api(
+      "/rest/v1/lc_commerce_stores?id=eq." +
+      encodeURIComponent(storeId()),
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ whatsapp_number: phone })
+      }
+    );
+
+    if (!Array.isArray(result) || !result.length) {
+      throw new Error(
+        "Tu cuenta no tiene permiso para editar este negocio."
+      );
+    }
+
+    currentStore.whatsapp_number = phone;
+    status.textContent = "WhatsApp guardado correctamente.";
+
+  } catch (error) {
+    status.textContent = "Error: " + error.message;
+  }
+}
+
+// ======================================
 // INICIAR
 // ======================================
 
@@ -1533,6 +1742,10 @@ document.getElementById("ordersBtn").onclick = () => {
 
 document.getElementById("imagesBtn").onclick = () => {
   renderImageGallery();
+};
+
+document.getElementById("businessBtn").onclick = () => {
+  renderBusiness();
 };
 
 // No recuperar sesiones anteriores.
