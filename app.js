@@ -232,8 +232,18 @@ async function loadStore() {
     store.whatsapp_number
   );
 
-  document.title =
-    `${store.name} - LC Commerce`;
+  document.title = store.name;
+
+  const heroTitle = document.getElementById("heroTitle");
+
+  if (heroTitle) {
+    heroTitle.textContent =
+      `Bienvenido a ${store.name} 👋`;
+  }
+
+  document
+    .getElementById("payBox")
+    ?.classList.toggle("hidden", !getPaymentUrl());
 
   const storeNameElement =
     document.getElementById("storeName");
@@ -458,18 +468,8 @@ function renderProducts() {
     const emoji =
       category?.emoji || "🛍️";
 
-    let imageUrl =
+    const imageUrl =
       String(product.image_url || "").trim();
-
-    if (imageUrl) {
-      const separator =
-        imageUrl.includes("?") ? "&" : "?";
-
-      imageUrl =
-        `${imageUrl}${separator}lc_product=${encodeURIComponent(
-          String(product.id)
-        )}&v=${Date.now()}`;
-    }
 
     const photo = imageUrl
       ? `
@@ -970,9 +970,9 @@ async function sendWhatsApp() {
     const order = await createOrder();
 
     const lines = [
-      "*NUEVO PEDIDO LC COMMERCE*",
+      "*NUEVO PEDIDO*",
       "",
-      `Tienda: ${currentStore?.name || "LC Commerce"}`,
+      `Tienda: ${currentStore?.name || ""}`,
       `Pedido: ${order.id}`,
       `Cliente: ${order.name}`,
       `Teléfono del cliente: ${order.phone}`
@@ -1042,12 +1042,22 @@ async function sendWhatsApp() {
 // MERCADO PAGO
 // ===================================
 
+function getPaymentUrl() {
+  return String(
+    currentStore?.mercado_pago_url ||
+    MERCADO_PAGO_URL ||
+    ""
+  ).trim();
+}
+
 async function payOrder() {
   if (submitting) return;
 
-  if (!MERCADO_PAGO_URL) {
+  const paymentUrl = getPaymentUrl();
+
+  if (!paymentUrl) {
     return toast(
-      "Falta configurar el enlace de Mercado Pago"
+      "Este negocio todavía no tiene pago en línea"
     );
   }
 
@@ -1060,7 +1070,7 @@ async function payOrder() {
 
     toast("Pedido registrado. Abriendo pago...");
 
-    window.open(MERCADO_PAGO_URL, "_blank");
+    window.open(paymentUrl, "_blank");
 
     console.log(
       "Pedido registrado:",
