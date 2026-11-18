@@ -47,6 +47,58 @@ const loginButton = loginForm.querySelector("button");
 
 let initializing = true;
 let loginInProgress = false;
+let loadedStores = [];
+
+function storeLink(slug) {
+  return new URL(
+    "./?store=" + encodeURIComponent(slug),
+    window.location.href
+  ).href;
+}
+
+async function editStoreWhatsapp(storeId) {
+  const store =
+    loadedStores.find(item => item.id === storeId);
+
+  if (!store) return;
+
+  const answer = prompt(
+    "WhatsApp de " + store.name +
+    " (10 dígitos o 52 + 10 dígitos):",
+    store.whatsapp_number || ""
+  );
+
+  if (answer === null) return;
+
+  const phone = answer.replace(/\D/g, "");
+
+  if (!/^(52)?\d{10}$/.test(phone)) {
+    showMessage(
+      "El WhatsApp debe tener 10 dígitos (o 52 seguido de los 10 dígitos).",
+      "error"
+    );
+    return;
+  }
+
+  const { data, error } =
+    await supabaseClient
+      .from("lc_commerce_stores")
+      .update({ whatsapp_number: phone })
+      .eq("id", storeId)
+      .select("id");
+
+  if (error || !data || !data.length) {
+    showMessage(
+      "No se pudo guardar el WhatsApp" +
+      (error ? ": " + error.message : "."),
+      "error"
+    );
+    return;
+  }
+
+  showMessage("WhatsApp actualizado.");
+  await loadStores();
+}
 
 // ==========================================
 // MENSAJES
@@ -279,11 +331,13 @@ async function loadStores() {
       );
     }
 
-    const { data, error } =
+    let hasWhatsapp = true;
+
+    let { data, error } =
       await supabaseClient
         .from("lc_commerce_stores")
         .select(
-          "id,name,slug,status,created_at"
+          "id,name,slug,status,created_at,whatsapp_number"
         )
         .order(
           "created_at",
@@ -293,8 +347,27 @@ async function loadStores() {
         );
 
     if (error) {
+      hasWhatsapp = false;
+
+      ({ data, error } =
+        await supabaseClient
+          .from("lc_commerce_stores")
+          .select(
+            "id,name,slug,status,created_at"
+          )
+          .order(
+            "created_at",
+            {
+              ascending: false
+            }
+          ));
+    }
+
+    if (error) {
       throw error;
     }
+
+    loadedStores = data || [];
 
     if (!data || data.length === 0) {
 
@@ -320,17 +393,86 @@ async function loadStores() {
           </div>
 
           <div class="store-detail">
-            Dirección:
-            ${escapeHTML(store.slug)}
+            Tienda:
+            <a
+              class="small-link"
+              href="${escapeHTML(storeLink(store.slug))}"
+              target="_blank"
+              rel="noopener noreferrer">
+              ${escapeHTML(storeLink(store.slug))}
+            </a>
           </div>
+
+          ${
+            hasWhatsapp
+              ? `<div class="store-detail">
+                  WhatsApp:
+                  ${
+                    store.whatsapp_number
+                      ? escapeHTML(store.whatsapp_number)
+                      : "⚠️ sin configurar"
+                  }
+                </div>`
+              : ""
+          }
 
           <span class="status">
             ${escapeHTML(store.status)}
           </span>
 
+          <div class="topline" style="margin-top:10px">
+
+            <button
+              class="secondary"
+              type="button"
+              data-copy="${escapeHTML(store.slug)}">
+              Copiar enlace
+            </button>
+
+            ${
+              hasWhatsapp
+                ? `<button
+                    class="secondary"
+                    type="button"
+                    data-whatsapp="${escapeHTML(store.id)}">
+                    Editar WhatsApp
+                  </button>`
+                : ""
+            }
+
+          </div>
+
         </div>
 
       `).join("");
+
+    storesList
+      .querySelectorAll("[data-copy]")
+      .forEach(button => {
+
+        button.addEventListener("click", async () => {
+
+          const link =
+            storeLink(button.dataset.copy);
+
+          try {
+            await navigator.clipboard.writeText(link);
+            showMessage("Enlace copiado: " + link);
+
+          } catch (_) {
+            prompt("Copia el enlace de la tienda:", link);
+          }
+        });
+      });
+
+    storesList
+      .querySelectorAll("[data-whatsapp]")
+      .forEach(button => {
+
+        button.addEventListener("click", () => {
+          editStoreWhatsapp(button.dataset.whatsapp);
+        });
+      });
 
   } catch (error) {
 
@@ -382,6 +524,12 @@ createStoreForm.addEventListener(
         .trim()
         .toLowerCase();
 
+    const whatsapp =
+      document
+        .getElementById("storeWhatsapp")
+        .value
+        .replace(/\D/g, "");
+
     // ======================================
     // VALIDAR CAMPOS
     // ======================================
@@ -389,7 +537,8 @@ createStoreForm.addEventListener(
     if (
       !storeName ||
       !slug ||
-      !ownerEmail
+      !ownerEmail ||
+      !whatsapp
     ) {
 
       showMessage(
@@ -412,6 +561,16 @@ createStoreForm.addEventListener(
 
       showMessage(
         "La dirección solo puede contener minúsculas, números y guiones.",
+        "error"
+      );
+
+      return;
+    }
+
+    if (!/^(52)?\d{10}$/.test(whatsapp)) {
+
+      showMessage(
+        "El WhatsApp debe tener 10 dígitos (o 52 seguido de los 10 dígitos).",
         "error"
       );
 
@@ -476,7 +635,10 @@ createStoreForm.addEventListener(
                 slug,
 
               owner_email:
-                ownerEmail
+                ownerEmail,
+
+              whatsapp_number:
+                whatsapp
 
             })
           }
@@ -506,13 +668,47 @@ createStoreForm.addEventListener(
 
       createStoreForm.reset();
 
+      document
+        .getElementById("storeSlug")
+        .dataset.manual = "";
+
+      // Si la función de creación no guardó el WhatsApp,
+      // se guarda aquí con la sesión maestra.
+      let whatsappSaved = true;
+
+      try {
+        const { data: updated, error: updateError } =
+          await supabaseClient
+            .from("lc_commerce_stores")
+            .update({ whatsapp_number: whatsapp })
+            .eq("slug", slug)
+            .select("id");
+
+        if (
+          updateError ||
+          !updated ||
+          !updated.length
+        ) {
+          whatsappSaved = false;
+        }
+
+      } catch (_) {
+        whatsappSaved = false;
+      }
+
       // ====================================
       // MENSAJE
       // ====================================
 
       showMessage(
         "Tienda creada e invitación enviada a " +
-        ownerEmail
+        ownerEmail +
+        (
+          whatsappSaved
+            ? ""
+            : ". Atención: no se pudo guardar el WhatsApp; " +
+              "el propietario lo puede capturar en Mi negocio."
+        )
       );
 
       // ====================================
