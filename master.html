@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -233,8 +232,8 @@
       </div>
 
       <p class="note">
-        Desde aquí puedes registrar negocios y enviar
-        invitaciones a sus propietarios.
+        Desde aquí generas negocios: cada uno recibe su tienda,
+        su panel de administración y la invitación a su propietario.
       </p>
     </div>
 
@@ -264,6 +263,20 @@
         <p class="note">
           Se utilizará como identificador de la tienda.
           Solo minúsculas, números y guiones.
+        </p>
+
+        <label for="storeWhatsapp">WhatsApp del negocio</label>
+        <input
+          id="storeWhatsapp"
+          type="tel"
+          inputmode="tel"
+          maxlength="15"
+          placeholder="Ej. 6561234567"
+          required>
+
+        <p class="note">
+          Aquí llegarán los pedidos de sus clientes.
+          10 dígitos (o 52 seguido de los 10 dígitos).
         </p>
 
         <label for="ownerEmail">Correo del propietario</label>
@@ -322,7 +335,7 @@ window.addEventListener("unhandledrejection", function(event) {
 </script>
 
 <script
-  src="./master.js?v=20261116-3"
+  src="./master.js?v=20261118-1"
   onerror="
     const box = document.getElementById('message');
     box.textContent = 'No se pudo cargar master.js';
